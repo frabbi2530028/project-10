@@ -9,11 +9,6 @@ import math
 # Constants
 # ---------------------------------------------------------------------------
 
-# Stress signal radius bounds (in meters)
-STRESS_SIGNAL_MIN_RADIUS = 500    # 500 meters
-STRESS_SIGNAL_MAX_RADIUS = 1000   # 1 kilometre
-STRESS_SIGNAL_DEFAULT_RADIUS = 750  # default if not specified
-
 # How often the client should send location updates (seconds)
 LOCATION_UPDATE_INTERVAL = 3
 

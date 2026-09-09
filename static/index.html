@@ -79,17 +79,6 @@
             font-weight: 600;
         }
         .btn-phone:hover { background: #90e0ef; }
-        .btn-stress {
-            background: #e94560;
-            color: #fff;
-            font-weight: 600;
-        }
-        .btn-stress:hover { background: #c0392b; }
-        .btn-stress:disabled {
-            background: #444;
-            color: #888;
-            cursor: not-allowed;
-        }
         .btn-sim {
             background: #6c5ce7;
             color: #fff;
@@ -116,30 +105,6 @@
             height: calc(100vh - 52px);
         }
 
-        /* ── Alert banner (stress signal received) ──────────── */
-        #alert-banner {
-            display: none;
-            position: fixed;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #e74c3c;
-            color: #fff;
-            padding: 14px 28px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 0.95rem;
-            z-index: 2000;
-            box-shadow: 0 4px 20px rgba(231, 76, 60, 0.6);
-            animation: pulse-alert 1s ease-in-out infinite;
-            text-align: center;
-            max-width: 90%;
-        }
-        @keyframes pulse-alert {
-            0%, 100% { transform: translateX(-50%) scale(1); }
-            50%      { transform: translateX(-50%) scale(1.03); }
-        }
-
         /* ── Location hint banner ────────────────────────── */
         #loc-banner {
             display: none;
@@ -158,6 +123,19 @@
             box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
             max-width: 480px;
         }
+        .btn-enable-gps {
+            display: block;
+            margin: 10px auto 0;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #00b4d8;
+            color: #0b1d3a;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .btn-enable-gps:hover { background: #90e0ef; }
 
         /* ── Modal (Phone Connect) ───────────────────────── */
         #phone-modal-overlay {
@@ -326,9 +304,6 @@
         <button id="btnPhone" class="btn-phone" onclick="openPhoneModal()">
             📱 Connect Phone
         </button>
-        <button id="btnStress" class="btn-stress" onclick="sendStressSignal()" disabled>
-            🚨 Stress Signal
-        </button>
         <button class="btn-sim" onclick="spawnSimulated()">
             👥 Add Simulated
         </button>
@@ -340,14 +315,12 @@
     </div>
 </div>
 
-<!-- ── Alert banner (stress signal received) ──────────── -->
-<div id="alert-banner">
-    🚨 STRESS SIGNAL — Someone nearby needs help!
-</div>
-
 <!-- ── Location info / hint banner ────────────────────── -->
 <div id="loc-banner">
     📍 <span id="loc-banner-text">Obtaining your GPS location…</span>
+    <button id="btnEnableGps" class="btn-enable-gps" onclick="requestGpsPermission()" hidden>
+        Tap to Enable Location
+    </button>
 </div>
 
 <!-- ── Phone Connect Modal ────────────────────────────── -->
@@ -416,7 +389,7 @@ let map = null;
 let markers = {};       // user_id -> L.circleMarker
 let myMarker = null;    // our own distinct marker
 let myAccCircle = null; // accuracy radius circle
-let stressCircle = null;
+let hasFitOthersOnce = false; // only auto-fit the view to everyone once, so it doesn't fight manual pan/zoom
 
 // Color mapping (Preserves privacy: only color + role, no personal identity)
 const TYPE_COLORS = {
@@ -439,16 +412,17 @@ function initMap(lat, lng) {
         maxZoom: 19,
     }).addTo(map);
 
-    // Allow clicking on map as manual fallback if device has no GPS
-    map.on('click', function (e) {
-        setMyLocation(e.latlng.lat, e.latlng.lng, 10, true);
-    });
+    // NOTE: intentionally no click/tap-to-set-location handler here.
+    // Your own position must always come from the device's real GPS fix —
+    // there is no manual override, so nobody can drop a fake "You" pin.
 }
 
 // =====================================================================
-// Set My Location (from GPS or fallback)
+// Set My Location — always the device's real, exact GPS fix.
+// There is no manual/click-to-set path; this is only ever called from
+// the geolocation watchPosition callback below.
 // =====================================================================
-function setMyLocation(lat, lng, accuracy = null, isManual = false) {
+function setMyLocation(lat, lng, accuracy = null) {
     myLat = lat;
     myLng = lng;
     myAccuracy = accuracy;
@@ -496,11 +470,6 @@ function setMyLocation(lat, lng, accuracy = null, isManual = false) {
         }
     }
 
-    // Auto-center map on first lock
-    if (!isManual) {
-        map.panTo([lat, lng]);
-    }
-
     // Auto-connect to WebSocket if not connected yet
     if (!connected) {
         connectWS();
@@ -528,13 +497,38 @@ function sendLocationToServer() {
 function startGpsTracking() {
     const gpsBadge = document.getElementById('gpsBadge');
     gpsBadge.textContent = '🛰️ GPS: Requesting…';
+    gpsBadge.className = 'status-badge';
+
+    // iOS Safari (and most mobile browsers) refuse geolocation outright on
+    // an insecure origin — no permission prompt is ever shown, it just
+    // silently fails. Catch that case with a specific, actionable message
+    // instead of a generic "denied".
+    if (window.isSecureContext === false) {
+        gpsBadge.textContent = '🛰️ GPS: Insecure Link';
+        gpsBadge.className = 'status-badge warning';
+        showLocHint('⚠️ This link is not secure (http://), so the browser blocks location access entirely — even before asking. Reopen this page using the HTTPS link from "📱 Connect Phone".', false);
+        initMap(23.8103, 90.4125);
+        return;
+    }
 
     if (!('geolocation' in navigator)) {
         gpsBadge.textContent = '🛰️ GPS: Not Supported';
         gpsBadge.className = 'status-badge warning';
-        showLocHint('GPS not supported. Click on the map to set location.');
+        showLocHint('This browser has no GPS support. Tap "📱 Connect Phone" to join from a phone with real GPS instead.', false);
         initMap(23.8103, 90.4125);
         return;
+    }
+
+    // Show the manual "Tap to Enable Location" fallback immediately.
+    // Some mobile browsers (notably iOS Safari in some situations) only
+    // ever show the system location prompt when the request is triggered
+    // directly by a tap — an automatic request on page load can silently
+    // do nothing, with no prompt and no error. Having a visible button
+    // from the start means you're never stuck with no way to trigger it.
+    showLocHint('Waiting for GPS lock — if no location permission popup appeared, tap below.', true);
+
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
     }
 
     // Immediate high-accuracy GPS watch
@@ -548,24 +542,59 @@ function startGpsTracking() {
             gpsBadge.className = 'status-badge active';
             hideLocHint();
 
-            setMyLocation(lat, lng, acc, false);
+            setMyLocation(lat, lng, acc);
         },
         (err) => {
             console.warn('GPS watch error:', err);
-            gpsBadge.textContent = '🛰️ GPS: Off/Denied';
             gpsBadge.className = 'status-badge warning';
 
-            // Check if on MacBook vs phone
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            if (!isMobile) {
-                showLocHint(
-                    '⚠️ MacBook Wi-Fi location unavailable. Enable in macOS Settings > Privacy > Location Services, or tap "📱 Connect Phone" to use your phone\'s GPS!'
-                );
+            const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+            // GeolocationPositionError codes: 1 = PERMISSION_DENIED,
+            // 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT.
+            if (err.code === 1) {
+                gpsBadge.textContent = '🛰️ GPS: Permission Denied';
+                if (isIOS) {
+                    showLocHint(
+                        '⚠️ Location is blocked for this page. On iPhone: Settings ▸ Privacy & Security ▸ Location Services must be ON, and Settings ▸ Safari ▸ Location must be "Ask" (not "Never"). Then reload this page and tap the button below.',
+                        true
+                    );
+                } else if (isMobile) {
+                    showLocHint('⚠️ Location permission was denied. Enable it for this site in your browser settings, then reload and tap below.', true);
+                } else {
+                    showLocHint(
+                        '⚠️ MacBook location unavailable. Enable in macOS Settings > Privacy > Location Services, or tap "📱 Connect Phone" to use your phone\'s GPS!',
+                        true
+                    );
+                }
+            } else if (err.code === 3) {
+                gpsBadge.textContent = '🛰️ GPS: Timed Out';
+                if (isMobile) {
+                    showLocHint('⚠️ GPS is taking a while to lock (weak signal / indoors?). Still trying — tap below to retry now.', true);
+                } else {
+                    showLocHint(
+                        '⚠️ This computer has no GPS chip — it can only approximate location via Wi-Fi, which just timed out. For your real position, tap "📱 Connect Phone" instead.',
+                        true
+                    );
+                }
             } else {
-                showLocHint('⚠️ Please enable GPS / Location permissions in your phone browser settings.');
+                // err.code === 2 (POSITION_UNAVAILABLE) or unrecognized.
+                // A MacBook (no GPS hardware) failing to resolve a Wi-Fi-based
+                // fix lands here far more often than in the permission-denied
+                // branch above, so it needs the same "use your phone" steer.
+                gpsBadge.textContent = '🛰️ GPS: Unavailable';
+                if (isMobile) {
+                    showLocHint('⚠️ Could not get a GPS fix. Make sure Location Services is on for this browser, then tap below to retry.', true);
+                } else {
+                    showLocHint(
+                        '⚠️ This computer has no GPS chip — Wi-Fi based location failed. Check macOS Settings ▸ Privacy & Security ▸ Location Services is ON and enabled for your browser, or just tap "📱 Connect Phone" to get your real, exact position from your phone instead.',
+                        true
+                    );
+                }
             }
 
-            // Fallback default map center so user can click
+            // Fallback default map center so the map isn't blank while waiting
             if (!map) {
                 initMap(23.8103, 90.4125);
             }
@@ -573,14 +602,24 @@ function startGpsTracking() {
         {
             enableHighAccuracy: true,
             maximumAge: 1000,
-            timeout: 12000,
+            timeout: 20000,
         }
     );
 }
 
-function showLocHint(text) {
+// Re-triggers the GPS request from inside a real tap/click. Some mobile
+// browsers only show the OS-level location permission prompt when the
+// call happens synchronously inside a user gesture, so this is kept as a
+// guaranteed fallback path alongside the automatic on-load attempt.
+function requestGpsPermission() {
+    startGpsTracking();
+}
+
+function showLocHint(text, showEnableButton) {
     const b = document.getElementById('loc-banner');
+    const btn = document.getElementById('btnEnableGps');
     document.getElementById('loc-banner-text').textContent = text;
+    btn.hidden = !showEnableButton;
     b.style.display = 'block';
 }
 
@@ -601,7 +640,7 @@ function toggleConnection() {
 
 function connectWS() {
     if (myLat === null) {
-        showLocHint('Please wait for GPS lock, or click on the map to drop your location!');
+        showLocHint('Waiting for your exact GPS location — this can\'t be set manually.');
         return;
     }
 
@@ -620,7 +659,6 @@ function connectWS() {
         const btn = document.getElementById('btnConnect');
         btn.textContent = 'Connected';
         btn.classList.add('connected');
-        document.getElementById('btnStress').disabled = false;
         const statusBadge = document.getElementById('status');
         statusBadge.textContent = 'Online';
         statusBadge.className = 'status-badge active';
@@ -667,7 +705,6 @@ function disconnectWS() {
     const btn = document.getElementById('btnConnect');
     btn.textContent = 'Connect';
     btn.classList.remove('connected');
-    document.getElementById('btnStress').disabled = true;
     const statusBadge = document.getElementById('status');
     statusBadge.textContent = 'Offline';
     statusBadge.className = 'status-badge';
@@ -690,7 +727,7 @@ function onRoleChanged() {
 }
 
 // =====================================================================
-// Handle Server Messages (Real-Time Location & Stress Signals)
+// Handle Server Messages (Real-Time Location)
 // =====================================================================
 function handleServerMessage(msg) {
     switch (msg.event) {
@@ -702,14 +739,6 @@ function handleServerMessage(msg) {
 
         case 'locations':
             renderLocations(msg.data);
-            break;
-
-        case 'stress_signal':
-            showStressAlert(msg.data);
-            break;
-
-        case 'signal_sent':
-            showSignalConfirmation(msg.data.notified);
             break;
 
         case 'error':
@@ -771,73 +800,17 @@ function renderLocations(locations) {
     });
 
     document.getElementById('infoNearby').textContent = nearbyCount;
-}
 
-// =====================================================================
-// Stress Signal Functionality
-// =====================================================================
-function sendStressSignal() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({
-        action: 'stress_signal',
-        radius: 750, // 750 meters
-    }));
-
-    // Show radius on sender's map
-    if (myLat !== null && map) {
-        if (stressCircle) map.removeLayer(stressCircle);
-        stressCircle = L.circle([myLat, myLng], {
-            radius: 750,
-            color: '#e94560',
-            fillColor: '#e94560',
-            fillOpacity: 0.15,
-            weight: 2,
-            dashArray: '6, 6',
-        }).addTo(map);
-
-        setTimeout(() => {
-            if (stressCircle) {
-                map.removeLayer(stressCircle);
-                stressCircle = null;
-            }
-        }, 12000);
+    // The first time anyone else shows up, zoom/pan so they're actually
+    // visible — otherwise the tight initial zoom on your own position can
+    // leave a real, connected person just off-screen. After this one-time
+    // fit, we leave the view alone so it doesn't fight your own panning.
+    if (nearbyCount > 0 && !hasFitOthersOnce) {
+        hasFitOthersOnce = true;
+        const points = [[myLat, myLng]];
+        Object.values(markers).forEach((m) => points.push(m.getLatLng()));
+        map.fitBounds(points, { padding: [60, 60], maxZoom: 17 });
     }
-}
-
-function showStressAlert(data) {
-    const banner = document.getElementById('alert-banner');
-    const role = data.sender_type.charAt(0).toUpperCase() + data.sender_type.slice(1);
-    banner.innerHTML = `🚨 <strong>DISTRESS ALERT</strong>: A ${role} within ${Math.round(data.radius)}m needs assistance!`;
-    banner.style.display = 'block';
-
-    if (map) {
-        const circle = L.circle([data.lat, data.lng], {
-            radius: data.radius,
-            color: '#e74c3c',
-            fillColor: '#e74c3c',
-            fillOpacity: 0.2,
-            weight: 3,
-        }).addTo(map);
-
-        setTimeout(() => map.removeLayer(circle), 15000);
-    }
-
-    setTimeout(() => {
-        banner.style.display = 'none';
-    }, 10000);
-}
-
-function showSignalConfirmation(notified) {
-    const banner = document.getElementById('alert-banner');
-    banner.innerHTML = `✅ Stress signal broadcasted! Notified <strong>${notified}</strong> nearby person(s).`;
-    banner.style.display = 'block';
-    banner.style.background = '#27ae60';
-
-    setTimeout(() => {
-        banner.style.display = 'none';
-        banner.style.background = '#e74c3c';
-    }, 5000);
 }
 
 // =====================================================================

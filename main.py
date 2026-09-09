@@ -20,12 +20,7 @@ from pydantic import BaseModel
 import socket
 import tunnel
 from connection_manager import ConnectionManager
-from utils import (
-    STRESS_SIGNAL_MIN_RADIUS,
-    STRESS_SIGNAL_MAX_RADIUS,
-    STRESS_SIGNAL_DEFAULT_RADIUS,
-    VALID_USER_TYPES,
-)
+from utils import VALID_USER_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +73,10 @@ async def websocket_endpoint(websocket: WebSocket, user_type: str):
     ─────────────────────────
     Client → Server:
       {"action": "location", "lat": <float>, "lng": <float>}
-      {"action": "stress_signal", "radius": <float>}   (radius in metres, optional)
 
     Server → Client:
       {"event": "welcome",        "data": {"user_id": "...", "user_type": "..."}}
       {"event": "locations",      "data": [ {id, type, lat, lng}, … ]}
-      {"event": "stress_signal",  "data": {lat, lng, radius, sender_type}}
-      {"event": "signal_sent",    "data": {"notified": <int>}}
       {"event": "error",          "data": {"message": "..."}}
     """
     if user_type not in VALID_USER_TYPES:
@@ -125,16 +117,6 @@ async def websocket_endpoint(websocket: WebSocket, user_type: str):
                 # Broadcast updated locations to everyone
                 await manager.broadcast_locations()
 
-            elif action == "stress_signal":
-                radius = msg.get("radius", STRESS_SIGNAL_DEFAULT_RADIUS)
-                radius = max(STRESS_SIGNAL_MIN_RADIUS,
-                             min(STRESS_SIGNAL_MAX_RADIUS, float(radius)))
-                notified = await manager.send_stress_signal(user_id, radius)
-                await websocket.send_text(
-                    json.dumps(
-                        {"event": "signal_sent", "data": {"notified": notified}}
-                    )
-                )
             else:
                 await websocket.send_text(
                     json.dumps(

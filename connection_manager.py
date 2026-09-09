@@ -2,7 +2,7 @@
 WebSocket connection manager for CampusGuard.
 
 Tracks all connected users, their locations, and handles
-broadcasting locations and stress signals.
+broadcasting locations to everyone.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Dict, Optional
 
 from fastapi import WebSocket
 
-from utils import haversine, VALID_USER_TYPES, STRESS_SIGNAL_DEFAULT_RADIUS
+from utils import VALID_USER_TYPES
 
 
 @dataclass
@@ -112,57 +112,6 @@ class ConnectionManager:
             {"event": "locations", "data": self._location_payload()}
         )
         await self._broadcast(payload)
-
-    # ------------------------------------------------------------------
-    # Stress signal
-    # ------------------------------------------------------------------
-
-    async def send_stress_signal(
-        self,
-        sender_id: str,
-        radius_meters: float = STRESS_SIGNAL_DEFAULT_RADIUS,
-    ) -> int:
-        """
-        Broadcast a stress signal to all users within *radius_meters*
-        of the sender.
-
-        Returns the number of users who were notified.
-        """
-        sender = self._users.get(sender_id)
-        if sender is None or sender.latitude is None:
-            return 0
-
-        notified = 0
-        alert_payload = json.dumps(
-            {
-                "event": "stress_signal",
-                "data": {
-                    "lat": sender.latitude,
-                    "lng": sender.longitude,
-                    "radius": radius_meters,
-                    "sender_type": sender.user_type,
-                },
-            }
-        )
-
-        for uid, user in self._users.items():
-            if uid == sender_id:
-                continue
-            if user.latitude is None or user.longitude is None:
-                continue
-            dist = haversine(
-                sender.latitude, sender.longitude,
-                user.latitude, user.longitude,
-            )
-            if dist <= radius_meters:
-                if user.websocket is not None:
-                    try:
-                        await user.websocket.send_text(alert_payload)
-                        notified += 1
-                    except Exception:
-                        pass  # client may have disconnected
-
-        return notified
 
     # ------------------------------------------------------------------
     # Simulated users (for testing)
