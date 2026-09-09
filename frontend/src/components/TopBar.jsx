@@ -1,5 +1,4 @@
 import { CrosshairIcon, MenuIcon, PhoneIcon, ShieldIcon, TrashIcon, UsersIcon, WifiIcon } from './Icons';
-import { ROLES } from '../config';
 
 function StatusBadge({ id, icon: Icon, text, variant }) {
   return (
@@ -11,13 +10,13 @@ function StatusBadge({ id, icon: Icon, text, variant }) {
 }
 
 export default function TopBar({
-  role,
-  onRoleChange,
   connected,
   onToggleConnection,
   onOpenPhone,
   onSpawnSimulated,
   onClearSimulated,
+  onSignOut,
+  student,
   gps,
   menuOpen,
   onToggleMenu,
@@ -50,16 +49,6 @@ export default function TopBar({
       <div className={`controls ${menuOpen ? 'open' : ''}`.trim()}>
         <div className="sheet-handle" />
 
-        <div className="select-wrap">
-          <select id="userType" value={role} onChange={(e) => onRoleChange(e.target.value)}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r.charAt(0).toUpperCase() + r.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <button className={`btn-connect ${connected ? 'connected' : ''}`.trim()} onClick={onToggleConnection}>
           <span className="dot" />
           <span className="btn-label">{connected ? 'Connected' : 'Connect'}</span>
@@ -82,6 +71,13 @@ export default function TopBar({
 
         <StatusBadge id="gpsBadge" icon={CrosshairIcon} text={gps.text} variant={gps.variant} />
         <StatusBadge id="status" icon={WifiIcon} text={connected ? 'Online' : 'Offline'} variant={connected ? 'active' : ''} />
+
+        <div className="account-row">
+          <span className="account-email" title={student?.email}>{student?.email}</span>
+          <button className="btn-signout" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ const HEARTBEAT_MS = 3000;
  * the position object — otherwise every GPS tick would tear down and rebuild
  * the socket. Position updates are pushed separately in the second effect.
  */
-export function useLocationSocket({ enabled, role, position, onLocations }) {
+export function useLocationSocket({ enabled, role, position, token, onLocations, onAuthRejected }) {
   const [connected, setConnected] = useState(false);
   const [myId, setMyId] = useState(null);
 
@@ -18,16 +18,20 @@ export function useLocationSocket({ enabled, role, position, onLocations }) {
   const positionRef = useRef(position);
   positionRef.current = position;
 
-  // Keep the latest callback without making it an effect dependency.
+  // Keep the latest callbacks without making them effect dependencies.
   const onLocationsRef = useRef(onLocations);
   onLocationsRef.current = onLocations;
+  const onAuthRejectedRef = useRef(onAuthRejected);
+  onAuthRejectedRef.current = onAuthRejected;
 
   const hasFix = Boolean(position);
 
   useEffect(() => {
-    if (!enabled || !hasFix) return undefined;
+    if (!enabled || !hasFix || !token) return undefined;
 
-    const ws = new WebSocket(`${WS_BASE}/ws/${role}`);
+    // A browser can't set headers on a WebSocket handshake, so the session
+    // token goes in the query string.
+    const ws = new WebSocket(`${WS_BASE}/ws/${role}?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
     let heartbeat = null;
 
@@ -59,9 +63,15 @@ export function useLocationSocket({ enabled, role, position, onLocations }) {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setConnected(false);
       setMyId(null);
+      // 1008 = the server refused the session (unknown or expired token,
+      // e.g. after a backend restart). Surface it so the app can send the
+      // student back to the login screen instead of sitting on "Offline".
+      if (event.code === 1008) {
+        onAuthRejectedRef.current?.();
+      }
     };
 
     ws.onerror = (err) => console.error('WebSocket error:', err);
@@ -74,7 +84,7 @@ export function useLocationSocket({ enabled, role, position, onLocations }) {
       setConnected(false);
       setMyId(null);
     };
-  }, [enabled, hasFix, role]);
+  }, [enabled, hasFix, role, token]);
 
   // Push each new fix immediately, on top of the periodic heartbeat.
   useEffect(() => {

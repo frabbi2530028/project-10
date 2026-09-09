@@ -20,7 +20,7 @@ import random
 import math
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 import socket
 import tunnel
+import auth
 from connection_manager import ConnectionManager
 from utils import VALID_USER_TYPES
 
@@ -105,15 +106,48 @@ async def root():
 
 
 # ---------------------------------------------------------------------------
+# Login — UIU student credentials
+# ---------------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    student_id: str
+
+
+@app.post("/api/login")
+async def login(req: LoginRequest):
+    """
+    Check a UIU email / student ID pair and hand back a session token.
+
+    The token is required to open the location WebSocket, so the login gate
+    can't simply be skipped by connecting directly.
+    """
+    student, error = auth.validate_student(req.email, req.student_id)
+    if student is None:
+        raise HTTPException(status_code=401, detail=error)
+
+    return {"token": auth.issue_token(student), "student": student.public()}
+
+
+@app.post("/api/logout")
+async def logout(token: str = Body(embed=True)):
+    auth.revoke_token(token)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # WebSocket endpoint — real-time location tracking
 # ---------------------------------------------------------------------------
 
 @app.websocket("/ws/{user_type}")
-async def websocket_endpoint(websocket: WebSocket, user_type: str):
+async def websocket_endpoint(websocket: WebSocket, user_type: str, token: str | None = None):
     """
     Main WebSocket endpoint.
 
     Path parameter *user_type* must be one of: student, faculty, staff.
+    Query parameter *token* must be a session token from POST /api/login —
+    a browser can't attach headers to a WebSocket handshake, so the token
+    travels in the query string.
 
     Protocol (JSON messages):
     ─────────────────────────
@@ -127,6 +161,13 @@ async def websocket_endpoint(websocket: WebSocket, user_type: str):
     """
     if user_type not in VALID_USER_TYPES:
         await websocket.close(code=1008, reason=f"Invalid user_type: {user_type}")
+        return
+
+    student = auth.resolve_token(token)
+    if student is None:
+        # 1008 = policy violation. Without this the login page would be
+        # decorative: anyone could open a socket directly and be on the map.
+        await websocket.close(code=1008, reason="Sign in first")
         return
 
     user_id = await manager.connect(websocket, user_type)

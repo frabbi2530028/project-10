@@ -715,3 +715,149 @@ body {
     .info-panel { right: 10px; min-width: 148px; }
     #loc-banner { top: calc(58px + env(safe-area-inset-top)); padding: 14px 16px; font-size: 0.8rem; }
 }
+
+/* ── Login screen ─────────────────────────────────── */
+.login-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    padding-top: calc(24px + env(safe-area-inset-top));
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    background:
+        radial-gradient(1100px 560px at 14% -8%, var(--bg-glow-1) 0%, transparent 60%),
+        radial-gradient(900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
+        var(--bg);
+    z-index: 4000;
+    overflow-y: auto;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--surface-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 30px 26px;
+    text-align: center;
+    box-shadow: var(--shadow-lg), var(--glass-highlight);
+    animation: modal-appear .25s cubic-bezier(.2, .8, .3, 1.1);
+}
+
+.login-mark {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    margin: 0 auto 16px;
+}
+.login-mark .icon { width: 26px; height: 26px; }
+
+.login-card h1 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #ffffff, #9aa7c2);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.login-sub {
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    margin: 6px 0 22px;
+}
+
+.field { display: block; text-align: left; margin-bottom: 14px; }
+.field-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+}
+.field input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    font-family: var(--font);
+    /* 16px minimum stops iOS Safari zooming in when the field is focused */
+    font-size: 16px;
+    font-weight: 600;
+    outline: none;
+    transition: border-color .15s ease, background .15s ease;
+}
+.field input::placeholder { color: var(--text-faint); font-weight: 500; }
+.field input:focus {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.login-error {
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.4);
+    color: #fecaca;
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: left;
+    margin-bottom: 14px;
+}
+
+.login-submit {
+    width: 100%;
+    padding: 13px 18px;
+    border: none;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: #2b1a02;
+    font-family: var(--font);
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
+    transition: filter .15s ease, transform .12s ease;
+}
+.login-submit:hover:not(:disabled) { filter: brightness(1.08); }
+.login-submit:active:not(:disabled) { transform: scale(0.97); }
+.login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.login-note {
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    line-height: 1.5;
+    margin-top: 16px;
+}
+
+/* Signed-in identity + sign out, shown inside the controls */
+.account-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.account-email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.btn-signout {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-muted) !important;
+    flex-shrink: 0;
+}
+.btn-signout:hover { color: var(--danger) !important; border-color: rgba(248, 113, 113, 0.4) !important; }
