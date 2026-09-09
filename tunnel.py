@@ -38,9 +38,10 @@ _watchdog_thread: Optional[threading.Thread] = None
 _RECONNECT_DELAY_SECONDS = 3
 
 # Active health checking of the tunnel itself (see _health_loop).
-_HEALTH_INTERVAL_SECONDS = 20
-_HEALTH_TIMEOUT = 8
-_HEALTH_FAILURES_BEFORE_RESTART = 2
+_HEALTH_GRACE_SECONDS = 90      # let a new tunnel settle before judging it
+_HEALTH_INTERVAL_SECONDS = 60
+_HEALTH_TIMEOUT = 10
+_HEALTH_FAILURES_BEFORE_RESTART = 3   # ~3 min of real unreachability
 
 # cloudflared prints the assigned hostname to stderr during startup.
 _URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -92,13 +93,26 @@ def _spawn_tunnel_process(local_port: int) -> Optional[subprocess.Popen]:
         return None
 
 
-def _tunnel_is_reachable(url: str, local_port: int) -> bool:
-    """Is the advertised tunnel URL actually serving our app right now?"""
+def _tunnel_health(url: str) -> Optional[bool]:
+    """
+    Is the advertised tunnel URL actually serving our app?
+
+    Returns True (healthy), False (definitely broken), or None (inconclusive —
+    don't act on it).
+
+    The None case matters. A local resolver that can't yet see a freshly
+    created *.trycloudflare.com name says nothing about whether the tunnel
+    works for the rest of the internet — macOS in particular caches the
+    failed lookups from just before the name existed. Treating that as
+    "broken" made this function kill healthy tunnels every 20 seconds, so
+    the public URL churned constantly and nothing could stay connected.
+    A DNS failure is therefore inconclusive, never a reason to restart.
+    """
     host = url.split("://", 1)[-1]
     try:
         socket.getaddrinfo(host, 443)
     except OSError:
-        return False  # hostname is gone — the tunnel was torn down
+        return None  # local DNS can't see it — tells us nothing about the tunnel
 
     try:
         with urllib.request.urlopen(f"{url}/api/status", timeout=_HEALTH_TIMEOUT) as resp:
@@ -107,7 +121,7 @@ def _tunnel_is_reachable(url: str, local_port: int) -> bool:
         return False
 
 
-def _health_loop(process: subprocess.Popen, local_port: int) -> None:
+def _health_loop(process: subprocess.Popen) -> None:
     """
     Actively verify the tunnel, not just the process.
 
@@ -121,6 +135,9 @@ def _health_loop(process: subprocess.Popen, local_port: int) -> None:
     """
     global _public_url
 
+    # Give a new tunnel time to settle and propagate before judging it.
+    time.sleep(_HEALTH_GRACE_SECONDS)
+
     failures = 0
     while not _stop_requested and process.poll() is None:
         time.sleep(_HEALTH_INTERVAL_SECONDS)
@@ -129,7 +146,10 @@ def _health_loop(process: subprocess.Popen, local_port: int) -> None:
         if not url or process.poll() is not None or _stop_requested:
             continue
 
-        if _tunnel_is_reachable(url, local_port):
+        health = _tunnel_health(url)
+        if health is None:
+            continue  # inconclusive — leave a working tunnel alone
+        if health:
             failures = 0
             continue
 
@@ -162,7 +182,7 @@ def _watchdog_loop(local_port: int) -> None:
         reader.start()
 
         health = threading.Thread(
-            target=_health_loop, args=(process, local_port), daemon=True
+            target=_health_loop, args=(process,), daemon=True
         )
         health.start()
 
