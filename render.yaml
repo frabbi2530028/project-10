@@ -1,0 +1,23 @@
+# Render blueprint for the FastAPI + WebSocket backend.
+# Render supports persistent WebSocket connections, which Netlify does not.
+#
+# Free tier note: the instance sleeps after ~15 minutes with no traffic, so
+# the first request after a quiet period takes ~50s while it wakes up.
+
+services:
+  - type: web
+    name: campusguard-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # No dev tunnel in production — the host already gives us public HTTPS.
+      - key: ENABLE_TUNNEL
+        value: "0"
+      # Lock this down to your Netlify URL once you know it, e.g.
+      # https://campusguard.netlify.app
+      - key: CORS_ORIGINS
+        value: "*"

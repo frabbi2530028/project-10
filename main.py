@@ -1,18 +1,27 @@
 """
 CampusGuard — FastAPI backend entry-point.
 
-Run with:  python main.py
-Then open: http://localhost:8000
+Local:      python main.py           → http://localhost:8000
+Production: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+Environment variables
+---------------------
+PORT            Port to bind (Render and most PaaS hosts set this).
+ENABLE_TUNNEL   "0" to skip the local Pinggy dev tunnel (set this in prod).
+CORS_ORIGINS    Comma-separated allowed origins for the browser API calls,
+                e.g. "https://campusguard.netlify.app". Defaults to "*".
 """
 
 from __future__ import annotations
 
 import json
+import os
 import random
 import math
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -21,6 +30,19 @@ import socket
 import tunnel
 from connection_manager import ConnectionManager
 from utils import VALID_USER_TYPES
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+PORT = int(os.environ.get("PORT", 8000))
+
+# The dev tunnel only makes sense on a laptop, where a phone otherwise can't
+# reach the server. In production the host already provides a public HTTPS URL.
+ENABLE_TUNNEL = os.environ.get("ENABLE_TUNNEL", "1") not in ("0", "false", "False")
+
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -34,9 +56,10 @@ manager = ConnectionManager()
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     print("🟢  CampusGuard server starting …")
-    print("   Open http://localhost:8000 in your browser")
-    # Start the secure HTTPS tunnel for mobile phone GPS support
-    tunnel.start_tunnel(8000)
+    print(f"   Listening on port {PORT}")
+    if ENABLE_TUNNEL:
+        # Public HTTPS tunnel so a phone can reach a laptop during development
+        tunnel.start_tunnel(PORT)
     yield
     print("🔴  CampusGuard server shutting down …")
     tunnel.stop_tunnel()
@@ -44,8 +67,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CampusGuard", lifespan=lifespan)
 
-# Serve the frontend
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# The React frontend is served from a different origin (Netlify) than this
+# API, so the browser needs explicit permission for the /api/* calls.
+# WebSockets aren't subject to CORS, so the live map works regardless.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Legacy static build (the pre-React page). Harmless to keep serving locally.
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +89,19 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def root():
-    with open("static/index.html") as f:
-        return HTMLResponse(content=f.read())
+    """
+    Landing page.
+
+    In production the real UI is the React app on Netlify; this backend only
+    serves the API and the WebSocket. Locally the old static page still works,
+    which keeps `python main.py` useful on its own.
+    """
+    if os.path.exists("static/index.html"):
+        with open("static/index.html") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(
+        content="<h1>CampusGuard API</h1><p>Backend is running. The UI is deployed separately.</p>"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -236,4 +282,4 @@ async def network_info():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

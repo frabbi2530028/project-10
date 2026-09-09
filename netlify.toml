@@ -1,0 +1,18 @@
+# Netlify hosts the React frontend only.
+# The FastAPI WebSocket backend cannot run here (Netlify Functions are
+# short-lived Lambdas with no persistent connections) — it is deployed
+# separately on Render, and the frontend reaches it via VITE_BACKEND_URL.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Single-page app: every route serves index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

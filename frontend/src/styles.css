@@ -1,0 +1,695 @@
+/* ── Reset ─────────────────────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Design tokens ────────────────────────────────── */
+:root {
+    --bg:            #060911;
+    --bg-glow-1:     #101a30;
+    --bg-glow-2:     #160c22;
+
+    --surface:          rgba(255, 255, 255, 0.06);
+    --surface-hover:    rgba(255, 255, 255, 0.11);
+    /* Opacity is deliberately not lower: over the light OSM basemap
+       a very transparent dark panel turns muddy gray and the text
+       stops being readable. The glass read comes from the heavy
+       blur + saturation below, which is how macOS does it too. */
+    --surface-strong:   rgba(14, 18, 30, 0.72);   /* big glass panels — topbar, sheet, modal */
+    --surface-elevated: rgba(16, 20, 33, 0.85);   /* small chips needing more legibility over the map */
+
+    --border:        rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.2);
+
+    --glass-blur:      blur(26px) saturate(190%);
+    --glass-blur-sm:   blur(14px) saturate(170%);
+    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+
+    --text:        #f3f5fa;
+    --text-muted:  #aab6cc;
+    --text-faint:  #8492ad;
+
+    --accent:        #22d3ee;
+    --accent-strong: #06b6d4;
+    --accent2:       #818cf8;
+    --accent2-strong:#6366f1;
+
+    --student: #fb7185;
+    --faculty: #60a5fa;
+    --staff:   #34d399;
+    --you:     #fbbf24;
+
+    --success: #34d399;
+    --warning: #fb923c;
+    --danger:  #f87171;
+
+    --radius-sm:   8px;
+    --radius-md:   12px;
+    --radius-lg:   18px;
+    --radius-full: 999px;
+
+    --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+    --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+    --font: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+html, body { height: 100%; }
+
+/* React mounts here, so #root carries the column layout the body used to
+   own in the static version. It deliberately creates no stacking context
+   or transform, so the mobile sheet's position:fixed still resolves
+   against the viewport. */
+#root {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+body {
+    font-family: var(--font);
+    color: var(--text);
+    background:
+        radial-gradient(1100px 560px at 14% -8%, var(--bg-glow-1) 0%, transparent 60%),
+        radial-gradient(900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
+        var(--bg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    stroke: currentColor;
+}
+
+/* ── Top bar ─────────────────────────────────────── */
+#topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 22px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    padding-left: calc(22px + env(safe-area-inset-left));
+    padding-right: calc(22px + env(safe-area-inset-right));
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    /* Above #sheet-scrim (2400) so the mobile sheet — which lives
+       inside this element's stacking context — paints above the
+       scrim rather than under it. */
+    z-index: 2600;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+}
+/* The glass lives on a pseudo-element, NOT on #topbar itself.
+   An element with backdrop-filter becomes the containing block for
+   its position:fixed descendants — with the filter on #topbar, the
+   mobile controls sheet anchored itself to the bar instead of the
+   viewport and hung open across the map. */
+#topbar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--surface-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-highlight);
+}
+#topbar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.55), transparent);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(34, 211, 238, 0.35);
+    flex-shrink: 0;
+}
+.brand-mark .icon { width: 18px; height: 18px; color: #04141c; stroke-width: 2.4; }
+.brand-text h1 {
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #ffffff, #9aa7c2);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1.1;
+}
+.brand-text p {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+#topbar .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ── Mobile-only: slim status dot + menu button ──────
+   Hidden on desktop, where the full badges and buttons
+   are already laid out inline in the top bar. */
+.topbar-mobile-actions { display: none; align-items: center; gap: 12px; }
+
+.status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    transition: background .2s ease, box-shadow .2s ease;
+}
+.status-dot.active {
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+    animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.status-dot.warning {
+    background: var(--warning);
+    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
+}
+
+.btn-menu {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0 !important;
+    border-radius: var(--radius-full);
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+}
+.btn-menu .icon { width: 17px; height: 17px; }
+
+.sheet-handle { display: none; }
+
+#sheet-scrim {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 6, 12, 0.45);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 2400;
+    opacity: 0;
+    transition: opacity .25s ease;
+}
+#sheet-scrim.open { display: block; opacity: 1; }
+
+/* ── Select ──────────────────────────────────────── */
+.select-wrap { position: relative; display: inline-flex; align-items: center; }
+#userType {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 30px 8px 14px;
+    border-radius: var(--radius-full);
+    font-family: var(--font);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+    transition: border-color .15s ease, background .15s ease;
+}
+#userType:hover, #userType:focus { border-color: var(--border-strong); background: var(--surface-hover); }
+.select-wrap::after {
+    content: '';
+    position: absolute;
+    right: 13px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-right: 1.6px solid var(--text-muted);
+    border-bottom: 1.6px solid var(--text-muted);
+    transform: translateY(-65%) rotate(45deg);
+    pointer-events: none;
+}
+
+/* ── Buttons ─────────────────────────────────────── */
+#topbar button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 15px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    font-family: var(--font);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    backdrop-filter: var(--glass-blur-sm);
+    -webkit-backdrop-filter: var(--glass-blur-sm);
+    transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease, filter .15s ease;
+    white-space: nowrap;
+}
+#topbar button:active { transform: scale(0.96); }
+
+.btn-connect {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+}
+.btn-connect:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.btn-connect.connected {
+    background: linear-gradient(135deg, var(--success), #10b981);
+    border-color: transparent;
+    color: #052e22;
+    box-shadow: 0 4px 16px rgba(52, 211, 153, 0.32);
+}
+.btn-connect .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; opacity: .55;
+}
+.btn-connect.connected .dot {
+    animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+.btn-phone {
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: #04222b;
+    box-shadow: 0 4px 16px rgba(34, 211, 238, 0.32);
+}
+.btn-phone:hover { filter: brightness(1.08); box-shadow: 0 6px 20px rgba(34, 211, 238, 0.45); }
+
+.btn-sim {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+.btn-sim:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+.btn-sim.danger:hover { color: var(--danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.1); }
+
+/* ── Status badges ───────────────────────────────── */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    padding: 7px 12px;
+    border-radius: var(--radius-full);
+    background: var(--surface);
+    backdrop-filter: var(--glass-blur-sm);
+    -webkit-backdrop-filter: var(--glass-blur-sm);
+    border: 1px solid var(--border);
+    box-shadow: var(--glass-highlight);
+    color: var(--text-muted);
+}
+.status-badge .icon { width: 13px; height: 13px; }
+.status-badge.active {
+    background: rgba(52, 211, 153, 0.12);
+    border-color: rgba(52, 211, 153, 0.35);
+    color: var(--success);
+}
+.status-badge.warning {
+    background: rgba(251, 146, 60, 0.12);
+    border-color: rgba(251, 146, 60, 0.35);
+    color: var(--warning);
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ── Map ─────────────────────────────────────────── */
+#map {
+    flex: 1 1 auto;
+    width: 100%;
+    background: var(--bg);
+}
+.leaflet-control-zoom {
+    border: none !important;
+    border-radius: var(--radius-md) !important;
+    overflow: hidden;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-md), var(--glass-highlight) !important;
+}
+.leaflet-control-zoom a {
+    background: var(--surface-elevated) !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+}
+.leaflet-control-zoom a:hover { background: rgba(30, 38, 58, 0.9) !important; }
+.leaflet-control-attribution {
+    background: rgba(6, 9, 17, 0.65) !important;
+    color: var(--text-faint) !important;
+    backdrop-filter: blur(6px);
+}
+.leaflet-control-attribution a { color: var(--text-muted) !important; }
+.leaflet-tooltip {
+    background: var(--surface-elevated) !important;
+    backdrop-filter: var(--glass-blur-sm);
+    -webkit-backdrop-filter: var(--glass-blur-sm);
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    border-radius: 8px !important;
+    font-family: var(--font) !important;
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+.leaflet-tooltip-top:before { border-top-color: var(--surface-elevated) !important; }
+
+/* ── Location hint banner ────────────────────────── */
+#loc-banner {
+    display: none;
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(92vw, 460px);
+    background: var(--surface-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: var(--text);
+    padding: 16px 20px;
+    border-radius: var(--radius-lg);
+    font-size: 0.83rem;
+    line-height: 1.5;
+    z-index: 1500;
+    text-align: center;
+    border: 1px solid rgba(251, 146, 60, 0.4);
+    box-shadow: var(--shadow-lg), var(--glass-highlight);
+    animation: banner-in .25s ease-out;
+}
+@keyframes banner-in {
+    from { opacity: 0; transform: translate(-50%, -6px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+#loc-banner .icon {
+    width: 16px; height: 16px;
+    color: var(--warning);
+    vertical-align: -3px;
+    margin-right: 4px;
+}
+.btn-enable-gps {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 12px auto 0;
+    padding: 10px 22px;
+    border: none;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: #04222b;
+    font-family: var(--font);
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(34, 211, 238, 0.32);
+    transition: filter .15s ease;
+}
+.btn-enable-gps:hover { filter: brightness(1.08); }
+.btn-enable-gps .icon { width: 15px; height: 15px; }
+
+/* ── Modal (Phone Connect) ───────────────────────── */
+#phone-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 6, 12, 0.78);
+    backdrop-filter: blur(6px);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.modal-card {
+    background: var(--surface-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+    box-shadow: var(--shadow-lg), var(--glass-highlight);
+    animation: modal-appear 0.22s cubic-bezier(.2,.8,.3,1.1);
+}
+@keyframes modal-appear {
+    from { transform: scale(0.94) translateY(6px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+.modal-icon {
+    width: 46px; height: 46px;
+    border-radius: 14px;
+    margin: 0 auto 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
+    box-shadow: 0 6px 20px rgba(34, 211, 238, 0.3);
+}
+.modal-icon .icon { width: 24px; height: 24px; color: #04141c; stroke-width: 2.2; }
+.modal-card h2 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+}
+.modal-card p {
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+    line-height: 1.55;
+}
+.qr-container {
+    background: #fff;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    min-height: 200px;
+    min-width: 200px;
+    width: fit-content;
+    box-shadow: var(--shadow-md);
+}
+.qr-container img {
+    width: 190px;
+    height: 190px;
+    display: block;
+}
+.qr-container .qr-loading {
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.url-box {
+    background: rgba(255, 255, 255, 0.04);
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    word-break: break-all;
+    font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    margin-bottom: 18px;
+    border: 1px dashed var(--border-strong);
+}
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.modal-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border-radius: var(--radius-full);
+    border: none;
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: filter .15s ease, background .15s ease;
+}
+.modal-actions .icon { width: 15px; height: 15px; }
+.btn-copy { background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #04222b; }
+.btn-copy:hover { filter: brightness(1.08); }
+.btn-close-modal { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border) !important; }
+.btn-close-modal:hover { background: var(--surface-hover); color: var(--text); }
+
+/* ── Glass panels (legend + info) ────────────────── */
+.panel {
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    background: var(--surface-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 18px;
+    z-index: 1000;
+    font-size: 0.8rem;
+    box-shadow: var(--shadow-md), var(--glass-highlight);
+    animation: banner-in .3s ease-out;
+}
+.panel-title {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+}
+
+.legend { left: calc(20px + env(safe-area-inset-left)); }
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 0;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.legend-row.you {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--text);
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+}
+
+.info-panel { right: calc(20px + env(safe-area-inset-right)); min-width: 188px; }
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 3px 0;
+}
+.info-label { color: var(--text-faint); font-weight: 600; }
+.info-value {
+    color: var(--text);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* ── Custom Leaflet tooltip for "You" marker ─────── */
+.you-tooltip {
+    background: linear-gradient(135deg, var(--you), #f59e0b) !important;
+    border: none !important;
+    color: #3a2405 !important;
+    font-family: var(--font) !important;
+    font-weight: 800 !important;
+    font-size: 0.72rem !important;
+    padding: 4px 10px !important;
+    border-radius: var(--radius-full) !important;
+    box-shadow: 0 3px 10px rgba(251, 191, 36, 0.4) !important;
+}
+.you-tooltip::before {
+    border-top-color: #f59e0b !important;
+}
+
+/* ── Responsive adjustments for mobile ─────────────
+   The top bar used to wrap every control onto 2-3 lines,
+   eating a huge slice of the screen. On phones it now stays
+   a single slim row (brand + live status dot + menu button),
+   and all the actual controls slide up from the bottom in a
+   frosted sheet — the way a native app would do it. */
+@media (max-width: 650px) {
+    #topbar {
+        padding: 9px 14px;
+        padding-top: calc(9px + env(safe-area-inset-top));
+        gap: 10px;
+        flex-wrap: nowrap;
+    }
+    .brand-text p { display: none; }
+    .brand-text h1 { font-size: 0.95rem; }
+    .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+    .brand-mark .icon { width: 16px; height: 16px; }
+
+    .topbar-mobile-actions { display: flex; }
+    .btn-menu { display: inline-flex; }
+
+    /* The control cluster becomes a bottom sheet */
+    #topbar .controls {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        gap: 10px;
+        padding: 12px 18px calc(20px + env(safe-area-inset-bottom));
+        background: var(--surface-strong);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-top: 1px solid var(--border-strong);
+        border-radius: 24px 24px 0 0;
+        box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5), var(--glass-highlight);
+        transform: translateY(105%);
+        transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+        z-index: 2500;
+    }
+    #topbar .controls.open { transform: translateY(0); }
+
+    .sheet-handle {
+        display: block;
+        width: 38px;
+        height: 4px;
+        border-radius: var(--radius-full);
+        background: var(--border-strong);
+        margin: 0 auto 6px;
+    }
+
+    /* Full-width stacked rows inside the sheet */
+    #topbar .controls .select-wrap,
+    #topbar .controls button,
+    #topbar .controls .status-badge {
+        width: 100%;
+        justify-content: center;
+    }
+    #userType { width: 100%; text-align: center; padding: 12px 30px 12px 14px; font-size: 0.85rem; }
+    #topbar .controls button { padding: 12px 16px; font-size: 0.85rem; }
+    #topbar .controls .status-badge { padding: 10px 14px; font-size: 0.78rem; }
+
+    /* Testing-only controls, hidden on real phones. Needs the full
+       #topbar .controls prefix: a bare `.btn-sim` loses on
+       specificity to `#topbar button { display: inline-flex }`,
+       so these were still showing up in the sheet. */
+    #topbar .controls .btn-sim { display: none; }
+    .panel { bottom: 12px; padding: 10px 14px; font-size: 0.73rem; }
+    .legend { left: 10px; }
+    .info-panel { right: 10px; min-width: 148px; }
+    #loc-banner { top: 66px; padding: 14px 16px; font-size: 0.8rem; }
+}
