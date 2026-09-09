@@ -1,13 +1,23 @@
 """
-Tunnel manager using Pinggy SSH to provide an instant public HTTPS URL
-so mobile devices (phones) can connect and use hardware GPS.
+Tunnel manager — gives the local dev server an instant public HTTPS URL so
+phones (and a deployed frontend) can reach it.
 
-Free Pinggy tunnels don't stay up forever — they can drop after a
-while, or on any local network hiccup (Wi-Fi change, laptop sleep).
-This module watches the SSH process and automatically reconnects
-whenever it dies, instead of silently leaving clients pointed at a
-dead URL, so `/api/network-info` never advertises a link that's no
-longer resolvable.
+Uses Cloudflare's quick tunnels (`cloudflared tunnel --url ...`), which need
+no account and no config.
+
+Why not Pinggy (used previously): its free tier serves an interstitial
+"you are visiting a tunnel" HTML page to anything that looks like a browser,
+while returning real responses to curl and other clients. That silently
+breaks WebSockets from a real browser — the upgrade request gets HTML back
+instead of a 101, so the app connects fine from scripts but shows "Offline"
+on an actual phone. Browsers can't send the bypass header, because the
+WebSocket API doesn't allow custom headers. Cloudflare quick tunnels have no
+such interstitial and upgrade WebSockets correctly.
+
+Install once with:  brew install cloudflared
+
+The tunnel is watched and restarted if it dies, and `get_public_url()`
+returns None while no tunnel is live, so callers never advertise a dead URL.
 """
 
 import re
@@ -24,6 +34,9 @@ _watchdog_thread: Optional[threading.Thread] = None
 
 _RECONNECT_DELAY_SECONDS = 3
 
+# cloudflared prints the assigned hostname to stderr during startup.
+_URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+
 
 def get_public_url() -> Optional[str]:
     """Returns the current tunnel URL, or None if no live tunnel is up."""
@@ -31,79 +44,70 @@ def get_public_url() -> Optional[str]:
 
 
 def _read_stream(process: subprocess.Popen) -> None:
-    """Read the SSH process's stdout looking for the assigned public URL."""
+    """Scan the tunnel process output for the assigned public URL."""
     global _public_url
-    url_pattern = re.compile(
-        r"https://[a-zA-Z0-9\-\.]+\.(?:pinggy\.net|pinggy-free\.link|run\.pinggy-free\.link)"
-    )
 
     while True:
         line = process.stdout.readline()
         if not line:
             break
-        text = line.decode("utf-8", errors="replace")
-        match = url_pattern.search(text)
+        match = _URL_PATTERN.search(line.decode("utf-8", errors="replace"))
         if match:
             _public_url = match.group(0)
             print(f"🌍 Mobile HTTPS Tunnel Active: {_public_url}")
 
 
-def _spawn_ssh_process(local_port: int) -> Optional[subprocess.Popen]:
-    ssh_path = shutil.which("ssh")
-    if not ssh_path:
-        print("⚠️ ssh command not found; cannot start Pinggy tunnel.")
+def _spawn_tunnel_process(local_port: int) -> Optional[subprocess.Popen]:
+    cloudflared = shutil.which("cloudflared")
+    if not cloudflared:
+        print("⚠️  cloudflared not found — no public tunnel.")
+        print("   Install it with:  brew install cloudflared")
+        print("   (The app still works locally; phones just can't reach it.)")
         return None
 
     cmd = [
-        ssh_path,
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "ServerAliveInterval=30",
-        "-o", "ServerAliveCountMax=3",
-        "-p", "443",
-        f"-R0:localhost:{local_port}",
-        "a.pinggy.io",
+        cloudflared,
+        "tunnel",
+        "--url", f"http://localhost:{local_port}",
+        "--no-autoupdate",
     ]
 
     try:
         return subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.STDOUT,  # cloudflared logs the URL on stderr
             stdin=subprocess.DEVNULL,
         )
     except Exception as e:
-        print(f"⚠️ Failed to launch tunnel: {e}")
+        print(f"⚠️  Failed to launch tunnel: {e}")
         return None
 
 
 def _watchdog_loop(local_port: int) -> None:
-    """Keeps a tunnel alive: (re)spawns the SSH process whenever it exits,
-    until stop_tunnel() is called."""
+    """Keep a tunnel alive: (re)spawn it whenever it exits, until stopped."""
     global _tunnel_process, _public_url
 
     while not _stop_requested:
-        # Clear the old URL immediately — it's dead the moment we (re)connect,
-        # so /api/network-info correctly reports "not ready" during the gap
-        # instead of a stale link that no longer resolves.
+        # Clear the old URL immediately — a reconnect always gets a new
+        # hostname, so callers must not keep advertising the previous one.
         _public_url = None
 
-        process = _spawn_ssh_process(local_port)
+        process = _spawn_tunnel_process(local_port)
         if process is None:
-            return  # ssh missing entirely — nothing a retry will fix
+            return  # cloudflared missing entirely — retrying won't fix it
 
         _tunnel_process = process
         reader = threading.Thread(target=_read_stream, args=(process,), daemon=True)
         reader.start()
 
-        process.wait()  # blocks until the SSH connection dies
+        process.wait()  # blocks until the tunnel dies
         reader.join(timeout=1)
 
         if _stop_requested:
             return
 
-        print(
-            f"⚠️ Pinggy tunnel dropped; reconnecting in {_RECONNECT_DELAY_SECONDS}s …"
-        )
+        print(f"⚠️  Tunnel dropped; reconnecting in {_RECONNECT_DELAY_SECONDS}s …")
         _public_url = None
         time.sleep(_RECONNECT_DELAY_SECONDS)
 
