@@ -55,7 +55,7 @@ Set `ENABLE_TUNNEL=0` to skip it.
 2. On [render.com](https://render.com) → **New** → **Blueprint**, point it at
    the repo. It reads `render.yaml` and creates the service.
 3. Wait for the deploy, then note the URL, e.g.
-   `https://campusguard-api.onrender.com`.
+   `https://studentmap-api.onrender.com`.
 4. Check it: visiting `/api/status` should return
    `{"active_users":0,"status":"running"}`.
 
@@ -71,7 +71,7 @@ request after an idle period takes ~50s to wake the server.
 
    | Key | Value |
    |---|---|
-   | `VITE_BACKEND_URL` | `https://campusguard-api.onrender.com` |
+   | `VITE_BACKEND_URL` | `https://studentmap-api.onrender.com` |
 
    This is baked in at build time, so **redeploy after changing it**.
 3. Deploy. Open the Netlify URL on a phone and allow location access.
@@ -79,7 +79,7 @@ request after an idle period takes ~50s to wake the server.
 ### 3. Lock down CORS (optional but recommended)
 
 Once you know the Netlify URL, set `CORS_ORIGINS` on the Render service to it
-(e.g. `https://campusguard.netlify.app`) instead of the default `*`.
+(e.g. `https://studentmap-uiu.netlify.app`) instead of the default `*`.
 
 ## Environment variables
 

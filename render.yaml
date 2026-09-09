@@ -6,7 +6,7 @@
 
 services:
   - type: web
-    name: campusguard-api
+    name: studentmap-api
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -18,6 +18,6 @@ services:
       - key: ENABLE_TUNNEL
         value: "0"
       # Lock this down to your Netlify URL once you know it, e.g.
-      # https://campusguard.netlify.app
+      # https://studentmap-uiu.netlify.app
       - key: CORS_ORIGINS
         value: "*"

@@ -9,7 +9,7 @@ Environment variables
 PORT            Port to bind (Render and most PaaS hosts set this).
 ENABLE_TUNNEL   "0" to skip the local Cloudflare dev tunnel (set this in prod).
 CORS_ORIGINS    Comma-separated allowed origins for the browser API calls,
-                e.g. "https://campusguard-uiu.netlify.app". Defaults to "*".
+                e.g. "https://studentmap-uiu.netlify.app". Defaults to "*".
 """
 
 from __future__ import annotations
