@@ -29,10 +29,54 @@ can see — a one-time code emailed to the address. See README.
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
+from datetime import date
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
+
+# ---------------------------------------------------------------------------
+# UIU trimester calendar
+# ---------------------------------------------------------------------------
+#
+# A trimester code is YYS — two year digits then the season:
+#
+#   1 = Spring   February – June
+#   2 = Summer   July – October
+#   3 = Winter   November – January
+#
+# So Summer 2026 is 262, and Winter 2026 is 263 — which runs on into January
+# 2027 while still being 263, because the year in the code is the year the
+# trimester *started*.
+#
+# Nobody can hold a trimester that hasn't begun yet: while 262 is running, a
+# 263 ID doesn't exist, so it's rejected until November rolls around.
+
+SPRING, SUMMER, WINTER = "1", "2", "3"
+VALID_SEASONS = {SPRING, SUMMER, WINTER}
+
+
+def current_trimester(today: Optional[date] = None) -> str:
+    """The trimester code in effect on *today*, e.g. '262'."""
+    override = os.environ.get("CURRENT_TRIMESTER", "").strip()
+    if override:
+        return override
+
+    today = today or date.today()
+    month, year = today.month, today.year
+
+    if 2 <= month <= 6:
+        season = SPRING
+    elif 7 <= month <= 10:
+        season = SUMMER
+    else:
+        season = WINTER
+        # January still belongs to the Winter that began the previous November.
+        if month == 1:
+            year -= 1
+
+    return f"{year % 100:02d}{season}"
 
 # Local part: a name (letters, dots, hyphens) followed by exactly 7 digits,
 # which are trimester (3) + roll (4).
@@ -108,6 +152,22 @@ def validate_student(email: str, student_id: str) -> Tuple[Optional[Student], Op
         return None, (
             "Your email and student ID don't match — the trimester and roll "
             "number in each should be the same."
+        )
+
+    # The trimester has to be a real one. Season is 1 (Spring), 2 (Summer) or
+    # 3 (Winter); anything else can't exist.
+    season = trimester[2]
+    if season not in VALID_SEASONS:
+        return None, (
+            "That trimester doesn't exist — the last digit should be "
+            "1 (Spring), 2 (Summer) or 3 (Winter)."
+        )
+
+    # …and it can't be one that hasn't started yet.
+    now = current_trimester()
+    if int(trimester) > int(now):
+        return None, (
+            f"Trimester {trimester} hasn't started yet — the current one is {now}."
         )
 
     return (
