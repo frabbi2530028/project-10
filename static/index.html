@@ -2,8 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>CampusGuard — Live Campus Map & Location System</title>
+
+    <!-- Google Fonts — Manrope (premium, geometric sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Leaflet CSS -->
     <link
@@ -13,13 +18,82 @@
     />
 
     <style>
+        /* ── Reset ─────────────────────────────────────────── */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* ── Design tokens ────────────────────────────────── */
+        :root {
+            --bg:            #060911;
+            --bg-glow-1:     #101a30;
+            --bg-glow-2:     #160c22;
+
+            --surface:          rgba(255, 255, 255, 0.06);
+            --surface-hover:    rgba(255, 255, 255, 0.11);
+            /* Opacity is deliberately not lower: over the light OSM basemap
+               a very transparent dark panel turns muddy gray and the text
+               stops being readable. The glass read comes from the heavy
+               blur + saturation below, which is how macOS does it too. */
+            --surface-strong:   rgba(14, 18, 30, 0.72);   /* big glass panels — topbar, sheet, modal */
+            --surface-elevated: rgba(16, 20, 33, 0.85);   /* small chips needing more legibility over the map */
+
+            --border:        rgba(255, 255, 255, 0.1);
+            --border-strong: rgba(255, 255, 255, 0.2);
+
+            --glass-blur:      blur(26px) saturate(190%);
+            --glass-blur-sm:   blur(14px) saturate(170%);
+            --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+
+            --text:        #f3f5fa;
+            --text-muted:  #aab6cc;
+            --text-faint:  #8492ad;
+
+            --accent:        #22d3ee;
+            --accent-strong: #06b6d4;
+            --accent2:       #818cf8;
+            --accent2-strong:#6366f1;
+
+            --student: #fb7185;
+            --faculty: #60a5fa;
+            --staff:   #34d399;
+            --you:     #fbbf24;
+
+            --success: #34d399;
+            --warning: #fb923c;
+            --danger:  #f87171;
+
+            --radius-sm:   8px;
+            --radius-md:   12px;
+            --radius-lg:   18px;
+            --radius-full: 999px;
+
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+            --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+            --font: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        html, body { height: 100%; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #0f0f0f;
-            color: #e0e0e0;
+            font-family: var(--font);
+            color: var(--text);
+            background:
+                radial-gradient(1100px 560px at 14% -8%, var(--bg-glow-1) 0%, transparent 60%),
+                radial-gradient(900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
+                var(--bg);
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+
+        .icon {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            stroke: currentColor;
         }
 
         /* ── Top bar ─────────────────────────────────────── */
@@ -27,180 +101,429 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 16px;
-            background: #1a1a2e;
-            border-bottom: 2px solid #16213e;
-            z-index: 1000;
+            gap: 14px;
+            padding: 12px 22px;
+            padding-top: calc(12px + env(safe-area-inset-top));
+            padding-left: calc(22px + env(safe-area-inset-left));
+            padding-right: calc(22px + env(safe-area-inset-right));
+            border-bottom: 1px solid var(--border);
             position: relative;
+            /* Above #sheet-scrim (2400) so the mobile sheet — which lives
+               inside this element's stacking context — paints above the
+               scrim rather than under it. */
+            z-index: 2600;
             flex-wrap: wrap;
-            gap: 8px;
+            flex: 0 0 auto;
         }
-        #topbar h1 {
-            font-size: 1.15rem;
-            color: #e94560;
-            letter-spacing: 0.5px;
+        /* The glass lives on a pseudo-element, NOT on #topbar itself.
+           An element with backdrop-filter becomes the containing block for
+           its position:fixed descendants — with the filter on #topbar, the
+           mobile controls sheet anchored itself to the bar instead of the
+           viewport and hung open across the map. */
+        #topbar::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            background: var(--surface-strong);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            box-shadow: var(--glass-highlight);
+        }
+        #topbar::after {
+            content: '';
+            position: absolute;
+            left: 0; right: 0; bottom: -1px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.55), transparent);
+        }
+
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
             display: flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            box-shadow: 0 4px 16px rgba(34, 211, 238, 0.35);
+            flex-shrink: 0;
         }
+        .brand-mark .icon { width: 18px; height: 18px; color: #04141c; stroke-width: 2.4; }
+        .brand-text h1 {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            background: linear-gradient(135deg, #ffffff, #9aa7c2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            line-height: 1.1;
+        }
+        .brand-text p {
+            font-size: 0.66rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+        }
+
         #topbar .controls {
             display: flex;
             gap: 8px;
             align-items: center;
             flex-wrap: wrap;
         }
-        #topbar select, #topbar button {
-            padding: 7px 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.82rem;
+
+        /* ── Mobile-only: slim status dot + menu button ──────
+           Hidden on desktop, where the full badges and buttons
+           are already laid out inline in the top bar. */
+        .topbar-mobile-actions { display: none; align-items: center; gap: 12px; }
+
+        .status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--text-faint);
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+            transition: background .2s ease, box-shadow .2s ease;
+        }
+        .status-dot.active {
+            background: var(--success);
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+            animation: pulse-dot 1.8s ease-in-out infinite;
+        }
+        .status-dot.warning {
+            background: var(--warning);
+            box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
+        }
+
+        .btn-menu {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            padding: 0 !important;
+            border-radius: var(--radius-full);
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text) !important;
+        }
+        .btn-menu .icon { width: 17px; height: 17px; }
+
+        .sheet-handle { display: none; }
+
+        #sheet-scrim {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 6, 12, 0.45);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            z-index: 2400;
+            opacity: 0;
+            transition: opacity .25s ease;
+        }
+        #sheet-scrim.open { display: block; opacity: 1; }
+
+        /* ── Select ──────────────────────────────────────── */
+        .select-wrap { position: relative; display: inline-flex; align-items: center; }
+        #userType {
+            appearance: none;
+            -webkit-appearance: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 30px 8px 14px;
+            border-radius: var(--radius-full);
+            font-family: var(--font);
+            font-size: 0.8rem;
+            font-weight: 700;
             cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s ease;
-        }
-        #topbar select {
-            background: #16213e;
-            color: #e0e0e0;
             outline: none;
-            border: 1px solid #0f3460;
+            transition: border-color .15s ease, background .15s ease;
         }
+        #userType:hover, #userType:focus { border-color: var(--border-strong); background: var(--surface-hover); }
+        .select-wrap::after {
+            content: '';
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            width: 6px;
+            height: 6px;
+            border-right: 1.6px solid var(--text-muted);
+            border-bottom: 1.6px solid var(--text-muted);
+            transform: translateY(-65%) rotate(45deg);
+            pointer-events: none;
+        }
+
+        /* ── Buttons ─────────────────────────────────────── */
+        #topbar button {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 15px;
+            border: 1px solid transparent;
+            border-radius: var(--radius-full);
+            font-family: var(--font);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            backdrop-filter: var(--glass-blur-sm);
+            -webkit-backdrop-filter: var(--glass-blur-sm);
+            transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease, filter .15s ease;
+            white-space: nowrap;
+        }
+        #topbar button:active { transform: scale(0.96); }
+
         .btn-connect {
-            background: #0f3460;
-            color: #e0e0e0;
+            background: var(--surface);
+            border-color: var(--border);
+            color: var(--text);
         }
-        .btn-connect:hover { background: #1a4a7a; }
+        .btn-connect:hover { background: var(--surface-hover); border-color: var(--border-strong); }
         .btn-connect.connected {
-            background: #2ecc71;
-            color: #111;
+            background: linear-gradient(135deg, var(--success), #10b981);
+            border-color: transparent;
+            color: #052e22;
+            box-shadow: 0 4px 16px rgba(52, 211, 153, 0.32);
         }
+        .btn-connect .dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: currentColor; opacity: .55;
+        }
+        .btn-connect.connected .dot {
+            animation: pulse-dot 1.6s ease-in-out infinite;
+        }
+
         .btn-phone {
-            background: #00b4d8;
-            color: #0b1d3a;
-            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #04222b;
+            box-shadow: 0 4px 16px rgba(34, 211, 238, 0.32);
         }
-        .btn-phone:hover { background: #90e0ef; }
+        .btn-phone:hover { filter: brightness(1.08); box-shadow: 0 6px 20px rgba(34, 211, 238, 0.45); }
+
         .btn-sim {
-            background: #6c5ce7;
-            color: #fff;
+            background: var(--surface);
+            border-color: var(--border);
+            color: var(--text-muted);
         }
-        .btn-sim:hover { background: #a29bfe; }
+        .btn-sim:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
+        .btn-sim.danger:hover { color: var(--danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.1); }
 
         /* ── Status badges ───────────────────────────────── */
         .status-badge {
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            border-radius: 12px;
-            background: #2c3e50;
-            color: #ecf0f1;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            padding: 7px 12px;
+            border-radius: var(--radius-full);
+            background: var(--surface);
+            backdrop-filter: var(--glass-blur-sm);
+            -webkit-backdrop-filter: var(--glass-blur-sm);
+            border: 1px solid var(--border);
+            box-shadow: var(--glass-highlight);
+            color: var(--text-muted);
         }
-        .status-badge.active { background: #27ae60; color: #fff; }
-        .status-badge.warning { background: #d35400; color: #fff; }
+        .status-badge .icon { width: 13px; height: 13px; }
+        .status-badge.active {
+            background: rgba(52, 211, 153, 0.12);
+            border-color: rgba(52, 211, 153, 0.35);
+            color: var(--success);
+        }
+        .status-badge.warning {
+            background: rgba(251, 146, 60, 0.12);
+            border-color: rgba(251, 146, 60, 0.35);
+            color: var(--warning);
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(0.7); }
+        }
 
         /* ── Map ─────────────────────────────────────────── */
         #map {
-            width: 100vw;
-            height: calc(100vh - 52px);
+            flex: 1 1 auto;
+            width: 100%;
+            background: var(--bg);
         }
+        .leaflet-control-zoom {
+            border: none !important;
+            border-radius: var(--radius-md) !important;
+            overflow: hidden;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            box-shadow: var(--shadow-md), var(--glass-highlight) !important;
+        }
+        .leaflet-control-zoom a {
+            background: var(--surface-elevated) !important;
+            color: var(--text) !important;
+            border-color: var(--border) !important;
+        }
+        .leaflet-control-zoom a:hover { background: rgba(30, 38, 58, 0.9) !important; }
+        .leaflet-control-attribution {
+            background: rgba(6, 9, 17, 0.65) !important;
+            color: var(--text-faint) !important;
+            backdrop-filter: blur(6px);
+        }
+        .leaflet-control-attribution a { color: var(--text-muted) !important; }
+        .leaflet-tooltip {
+            background: var(--surface-elevated) !important;
+            backdrop-filter: var(--glass-blur-sm);
+            -webkit-backdrop-filter: var(--glass-blur-sm);
+            border: 1px solid var(--border) !important;
+            color: var(--text) !important;
+            border-radius: 8px !important;
+            font-family: var(--font) !important;
+            font-size: 0.7rem !important;
+            font-weight: 700 !important;
+            box-shadow: var(--shadow-sm) !important;
+        }
+        .leaflet-tooltip-top:before { border-top-color: var(--surface-elevated) !important; }
 
         /* ── Location hint banner ────────────────────────── */
         #loc-banner {
             display: none;
             position: fixed;
-            top: 65px;
+            top: 80px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(26, 26, 46, 0.95);
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-size: 0.85rem;
+            width: min(92vw, 460px);
+            background: var(--surface-strong);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            color: var(--text);
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            font-size: 0.83rem;
+            line-height: 1.5;
             z-index: 1500;
             text-align: center;
-            border: 1px solid #00b4d8;
-            box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
-            max-width: 480px;
+            border: 1px solid rgba(251, 146, 60, 0.4);
+            box-shadow: var(--shadow-lg), var(--glass-highlight);
+            animation: banner-in .25s ease-out;
+        }
+        @keyframes banner-in {
+            from { opacity: 0; transform: translate(-50%, -6px); }
+            to   { opacity: 1; transform: translate(-50%, 0); }
+        }
+        #loc-banner .icon {
+            width: 16px; height: 16px;
+            color: var(--warning);
+            vertical-align: -3px;
+            margin-right: 4px;
         }
         .btn-enable-gps {
-            display: block;
-            margin: 10px auto 0;
-            padding: 10px 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            margin: 12px auto 0;
+            padding: 10px 22px;
             border: none;
-            border-radius: 8px;
-            background: #00b4d8;
-            color: #0b1d3a;
-            font-weight: 700;
-            font-size: 0.85rem;
+            border-radius: var(--radius-full);
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #04222b;
+            font-family: var(--font);
+            font-weight: 800;
+            font-size: 0.82rem;
             cursor: pointer;
+            box-shadow: 0 4px 16px rgba(34, 211, 238, 0.32);
+            transition: filter .15s ease;
         }
-        .btn-enable-gps:hover { background: #90e0ef; }
+        .btn-enable-gps:hover { filter: brightness(1.08); }
+        .btn-enable-gps .icon { width: 15px; height: 15px; }
 
         /* ── Modal (Phone Connect) ───────────────────────── */
         #phone-modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(4px);
+            background: rgba(4, 6, 12, 0.78);
+            backdrop-filter: blur(6px);
             z-index: 3000;
             align-items: center;
             justify-content: center;
+            padding: 20px;
         }
         .modal-card {
-            background: #1a1a2e;
-            border: 2px solid #00b4d8;
-            border-radius: 14px;
-            padding: 24px;
-            width: 92%;
-            max-width: 440px;
+            background: var(--surface-strong);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 100%;
+            max-width: 420px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
-            animation: modal-appear 0.25s ease-out;
+            box-shadow: var(--shadow-lg), var(--glass-highlight);
+            animation: modal-appear 0.22s cubic-bezier(.2,.8,.3,1.1);
         }
         @keyframes modal-appear {
-            from { transform: scale(0.9); opacity: 0; }
-            to   { transform: scale(1); opacity: 1; }
+            from { transform: scale(0.94) translateY(6px); opacity: 0; }
+            to   { transform: scale(1) translateY(0); opacity: 1; }
         }
+        .modal-icon {
+            width: 46px; height: 46px;
+            border-radius: 14px;
+            margin: 0 auto 14px;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
+            box-shadow: 0 6px 20px rgba(34, 211, 238, 0.3);
+        }
+        .modal-icon .icon { width: 24px; height: 24px; color: #04141c; stroke-width: 2.2; }
         .modal-card h2 {
-            font-size: 1.25rem;
-            color: #00b4d8;
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text);
             margin-bottom: 8px;
+            letter-spacing: -0.01em;
         }
         .modal-card p {
-            font-size: 0.85rem;
-            color: #b0b0b0;
-            margin-bottom: 16px;
-            line-height: 1.4;
+            font-size: 0.84rem;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+            line-height: 1.55;
         }
         .qr-container {
             background: #fff;
-            padding: 12px;
-            border-radius: 10px;
-            display: inline-block;
-            margin-bottom: 14px;
-            min-height: 200px;
-            min-width: 200px;
+            padding: 14px;
+            border-radius: var(--radius-md);
             display: flex;
             align-items: center;
             justify-content: center;
+            margin: 0 auto 16px;
+            min-height: 200px;
+            min-width: 200px;
+            width: fit-content;
+            box-shadow: var(--shadow-md);
         }
         .qr-container img {
             width: 190px;
             height: 190px;
             display: block;
         }
+        .qr-container .qr-loading {
+            color: #94a3b8;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
         .url-box {
-            background: #16213e;
-            padding: 10px 14px;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 11px 14px;
+            border-radius: var(--radius-sm);
             word-break: break-all;
-            font-family: monospace;
-            font-size: 0.8rem;
-            color: #48dbfb;
-            margin-bottom: 14px;
-            border: 1px dashed #0f3460;
+            font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+            font-size: 0.78rem;
+            color: var(--accent);
+            margin-bottom: 18px;
+            border: 1px dashed var(--border-strong);
         }
         .modal-actions {
             display: flex;
@@ -208,82 +531,176 @@
             justify-content: center;
         }
         .modal-actions button {
-            padding: 9px 18px;
-            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 18px;
+            border-radius: var(--radius-full);
             border: none;
-            font-weight: 600;
+            font-family: var(--font);
+            font-weight: 700;
+            font-size: 0.82rem;
             cursor: pointer;
+            transition: filter .15s ease, background .15s ease;
         }
-        .btn-copy { background: #00b4d8; color: #111; }
-        .btn-close-modal { background: #444; color: #fff; }
+        .modal-actions .icon { width: 15px; height: 15px; }
+        .btn-copy { background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #04222b; }
+        .btn-copy:hover { filter: brightness(1.08); }
+        .btn-close-modal { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border) !important; }
+        .btn-close-modal:hover { background: var(--surface-hover); color: var(--text); }
 
-        /* ── Legend ───────────────────────────────────────── */
-        .legend {
+        /* ── Glass panels (legend + info) ────────────────── */
+        .panel {
             position: fixed;
-            bottom: 24px;
-            left: 18px;
-            background: rgba(26, 26, 46, 0.92);
-            padding: 12px 16px;
-            border-radius: 10px;
+            bottom: calc(20px + env(safe-area-inset-bottom));
+            background: var(--surface-strong);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 18px;
             z-index: 1000;
             font-size: 0.8rem;
-            line-height: 1.7;
-            border: 1px solid #16213e;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            box-shadow: var(--shadow-md), var(--glass-highlight);
+            animation: banner-in .3s ease-out;
+        }
+        .panel-title {
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--text-faint);
+            margin-bottom: 10px;
+        }
+
+        .legend { left: calc(20px + env(safe-area-inset-left)); }
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 3px 0;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .legend-row.you {
+            margin-top: 8px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+            color: var(--text);
         }
         .legend-dot {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            margin-right: 8px;
-            vertical-align: middle;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+            flex-shrink: 0;
         }
 
-        /* ── Info panel ──────────────────────────────────── */
-        .info-panel {
-            position: fixed;
-            bottom: 24px;
-            right: 18px;
-            background: rgba(26, 26, 46, 0.92);
-            padding: 12px 16px;
-            border-radius: 10px;
-            z-index: 1000;
-            font-size: 0.78rem;
-            border: 1px solid #16213e;
-            min-width: 170px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        .info-panel { right: calc(20px + env(safe-area-inset-right)); min-width: 188px; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 16px;
+            padding: 3px 0;
         }
-        .info-panel h3 {
-            margin-bottom: 4px;
-            color: #e94560;
-            font-size: 0.82rem;
+        .info-label { color: var(--text-faint); font-weight: 600; }
+        .info-value {
+            color: var(--text);
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
         }
-        .info-panel p { margin: 2px 0; }
 
-        /* ── Custom Leaflet Tooltip for You ──────────────── */
+        /* ── Custom Leaflet tooltip for "You" marker ─────── */
         .you-tooltip {
-            background: rgba(233, 69, 96, 0.95) !important;
+            background: linear-gradient(135deg, var(--you), #f59e0b) !important;
             border: none !important;
-            color: #fff !important;
-            font-weight: 700;
-            font-size: 0.75rem;
-            padding: 3px 8px !important;
-            border-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            color: #3a2405 !important;
+            font-family: var(--font) !important;
+            font-weight: 800 !important;
+            font-size: 0.72rem !important;
+            padding: 4px 10px !important;
+            border-radius: var(--radius-full) !important;
+            box-shadow: 0 3px 10px rgba(251, 191, 36, 0.4) !important;
         }
         .you-tooltip::before {
-            border-top-color: rgba(233, 69, 96, 0.95) !important;
+            border-top-color: #f59e0b !important;
         }
 
-        /* ── Responsive adjustments for mobile ───────────── */
+        /* ── Responsive adjustments for mobile ─────────────
+           The top bar used to wrap every control onto 2-3 lines,
+           eating a huge slice of the screen. On phones it now stays
+           a single slim row (brand + live status dot + menu button),
+           and all the actual controls slide up from the bottom in a
+           frosted sheet — the way a native app would do it. */
         @media (max-width: 650px) {
-            #topbar h1 { font-size: 1rem; }
-            #topbar { padding: 6px 10px; }
-            #topbar select, #topbar button { font-size: 0.75rem; padding: 5px 8px; }
-            .legend { bottom: 12px; left: 10px; font-size: 0.72rem; padding: 8px 12px; }
-            .info-panel { bottom: 12px; right: 10px; font-size: 0.72rem; padding: 8px 12px; min-width: 140px; }
-            .btn-sim { display: none; } /* Hide simulate buttons on mobile */
+            #topbar {
+                padding: 9px 14px;
+                padding-top: calc(9px + env(safe-area-inset-top));
+                gap: 10px;
+                flex-wrap: nowrap;
+            }
+            .brand-text p { display: none; }
+            .brand-text h1 { font-size: 0.95rem; }
+            .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+            .brand-mark .icon { width: 16px; height: 16px; }
+
+            .topbar-mobile-actions { display: flex; }
+            .btn-menu { display: inline-flex; }
+
+            /* The control cluster becomes a bottom sheet */
+            #topbar .controls {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                flex-direction: column;
+                align-items: stretch;
+                flex-wrap: nowrap;
+                gap: 10px;
+                padding: 12px 18px calc(20px + env(safe-area-inset-bottom));
+                background: var(--surface-strong);
+                backdrop-filter: var(--glass-blur);
+                -webkit-backdrop-filter: var(--glass-blur);
+                border-top: 1px solid var(--border-strong);
+                border-radius: 24px 24px 0 0;
+                box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5), var(--glass-highlight);
+                transform: translateY(105%);
+                transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+                z-index: 2500;
+            }
+            #topbar .controls.open { transform: translateY(0); }
+
+            .sheet-handle {
+                display: block;
+                width: 38px;
+                height: 4px;
+                border-radius: var(--radius-full);
+                background: var(--border-strong);
+                margin: 0 auto 6px;
+            }
+
+            /* Full-width stacked rows inside the sheet */
+            #topbar .controls .select-wrap,
+            #topbar .controls button,
+            #topbar .controls .status-badge {
+                width: 100%;
+                justify-content: center;
+            }
+            #userType { width: 100%; text-align: center; padding: 12px 30px 12px 14px; font-size: 0.85rem; }
+            #topbar .controls button { padding: 12px 16px; font-size: 0.85rem; }
+            #topbar .controls .status-badge { padding: 10px 14px; font-size: 0.78rem; }
+
+            /* Testing-only controls, hidden on real phones. Needs the full
+               #topbar .controls prefix: a bare `.btn-sim` loses on
+               specificity to `#topbar button { display: inline-flex }`,
+               so these were still showing up in the sheet. */
+            #topbar .controls .btn-sim { display: none; }
+            .panel { bottom: 12px; padding: 10px 14px; font-size: 0.73rem; }
+            .legend { left: 10px; }
+            .info-panel { right: 10px; min-width: 148px; }
+            #loc-banner { top: 66px; padding: 14px 16px; font-size: 0.8rem; }
         }
     </style>
 </head>
@@ -291,54 +708,155 @@
 
 <!-- ── Top bar ─────────────────────────────────────────── -->
 <div id="topbar">
-    <h1>🛡️ CampusGuard</h1>
-    <div class="controls">
-        <select id="userType" onchange="onRoleChanged()">
-            <option value="student">🔴 Student</option>
-            <option value="faculty">🔵 Faculty</option>
-            <option value="staff">🟢 Staff</option>
-        </select>
+    <div class="brand">
+        <div class="brand-mark">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
+        <div class="brand-text">
+            <h1>CampusGuard</h1>
+            <p>Live campus map</p>
+        </div>
+    </div>
+
+    <!-- Mobile-only: compact live status dot + menu toggle -->
+    <div class="topbar-mobile-actions">
+        <span id="statusDot" class="status-dot" title="Connection status"></span>
+        <button id="btnMenu" class="btn-menu" onclick="toggleMenu()" aria-label="Open controls">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="controls" id="controlsSheet">
+        <div class="sheet-handle"></div>
+
+        <div class="select-wrap">
+            <select id="userType" onchange="onRoleChanged()">
+                <option value="student">Student</option>
+                <option value="faculty">Faculty</option>
+                <option value="staff">Staff</option>
+            </select>
+        </div>
+
         <button id="btnConnect" class="btn-connect" onclick="toggleConnection()">
-            Connect
+            <span class="dot"></span>
+            <span class="btn-label">Connect</span>
         </button>
+
         <button id="btnPhone" class="btn-phone" onclick="openPhoneModal()">
-            📱 Connect Phone
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            <span>Connect Phone</span>
         </button>
+
         <button class="btn-sim" onclick="spawnSimulated()">
-            👥 Add Simulated
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span>Add Simulated</span>
         </button>
-        <button class="btn-sim" onclick="clearSimulated()" style="background:#c0392b;">
-            🗑️ Clear
+
+        <button class="btn-sim danger" onclick="clearSimulated()">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6"/>
+                <path d="M14 11v6"/>
+                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+            </svg>
+            <span>Clear</span>
         </button>
-        <span id="gpsBadge" class="status-badge">🛰️ GPS: Waiting</span>
-        <span id="status" class="status-badge">Offline</span>
+
+        <span id="gpsBadge" class="status-badge">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <line x1="22" y1="12" x2="19" y2="12"/>
+                <line x1="5" y1="12" x2="2" y2="12"/>
+                <line x1="12" y1="5" x2="12" y2="2"/>
+                <line x1="12" y1="22" x2="12" y2="19"/>
+            </svg>
+            <span class="badge-text">GPS: Waiting</span>
+        </span>
+        <span id="status" class="status-badge">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                <line x1="12" y1="20" x2="12.01" y2="20"/>
+            </svg>
+            <span class="badge-text">Offline</span>
+        </span>
     </div>
 </div>
 
+<!-- ── Scrim behind the mobile controls sheet ─────────── -->
+<div id="sheet-scrim" onclick="closeMenu()"></div>
+
 <!-- ── Location info / hint banner ────────────────────── -->
 <div id="loc-banner">
-    📍 <span id="loc-banner-text">Obtaining your GPS location…</span>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <span id="loc-banner-text">Obtaining your GPS location…</span>
+    <br>
     <button id="btnEnableGps" class="btn-enable-gps" onclick="requestGpsPermission()" hidden>
-        Tap to Enable Location
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="22" y1="12" x2="19" y2="12"/>
+            <line x1="5" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="5" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="19"/>
+        </svg>
+        <span>Tap to Enable Location</span>
     </button>
 </div>
 
 <!-- ── Phone Connect Modal ────────────────────────────── -->
 <div id="phone-modal-overlay" onclick="onOverlayClick(event)">
     <div class="modal-card">
-        <h2>📱 Connect Your Phone</h2>
+        <div class="modal-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+        </div>
+        <h2>Connect Your Phone</h2>
         <p>
-            Scan this QR code with your phone's camera. Your phone's real satellite GPS will activate and transmit your live location to this map!
+            Scan this QR code with your phone's camera. Your phone's real satellite GPS will activate and transmit your live location to this map.
         </p>
         <div class="qr-container" id="qrContainer">
-            <span style="color:#666; font-size:0.85rem;">Generating QR Code…</span>
+            <span class="qr-loading">Generating QR code…</span>
         </div>
         <div class="url-box" id="tunnelUrlBox">
             Fetching secure HTTPS link…
         </div>
         <div class="modal-actions">
-            <button class="btn-copy" onclick="copyTunnelUrl()">📋 Copy Link</button>
-            <button class="btn-close-modal" onclick="closePhoneModal()">Close</button>
+            <button class="btn-copy" onclick="copyTunnelUrl()">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy Link
+            </button>
+            <button class="btn-close-modal" onclick="closePhoneModal()">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                Close
+            </button>
         </div>
     </div>
 </div>
@@ -347,23 +865,22 @@
 <div id="map"></div>
 
 <!-- ── Legend ──────────────────────────────────────────── -->
-<div class="legend">
-    <div><span class="legend-dot" style="background:#e74c3c"></span>Student</div>
-    <div><span class="legend-dot" style="background:#3498db"></span>Faculty</div>
-    <div><span class="legend-dot" style="background:#2ecc71"></span>Staff</div>
-    <div style="margin-top:4px; border-top:1px solid #333; padding-top:4px;">
-        <span class="legend-dot" style="background:#f39c12; border:2px solid #fff;"></span>📍 You
-    </div>
+<div class="panel legend">
+    <div class="panel-title">Legend</div>
+    <div class="legend-row"><span class="legend-dot" style="background:var(--student)"></span>Student</div>
+    <div class="legend-row"><span class="legend-dot" style="background:var(--faculty)"></span>Faculty</div>
+    <div class="legend-row"><span class="legend-dot" style="background:var(--staff)"></span>Staff</div>
+    <div class="legend-row you"><span class="legend-dot" style="background:var(--you)"></span>You</div>
 </div>
 
 <!-- ── Info panel ──────────────────────────────────────── -->
-<div class="info-panel">
-    <h3>Live Info</h3>
-    <p>Role: <span id="infoType">—</span></p>
-    <p>GPS Acc: <span id="infoAcc">—</span></p>
-    <p>Lat: <span id="infoLat">—</span></p>
-    <p>Lng: <span id="infoLng">—</span></p>
-    <p>Nearby People: <span id="infoNearby">0</span></p>
+<div class="panel info-panel">
+    <div class="panel-title">Live Info</div>
+    <div class="info-row"><span class="info-label">Role</span><span class="info-value" id="infoType">—</span></div>
+    <div class="info-row"><span class="info-label">GPS Acc.</span><span class="info-value" id="infoAcc">—</span></div>
+    <div class="info-row"><span class="info-label">Lat</span><span class="info-value" id="infoLat">—</span></div>
+    <div class="info-row"><span class="info-label">Lng</span><span class="info-value" id="infoLng">—</span></div>
+    <div class="info-row"><span class="info-label">Nearby</span><span class="info-value" id="infoNearby">0</span></div>
 </div>
 
 <!-- ── Leaflet JS ─────────────────────────────────────── -->
@@ -393,10 +910,44 @@ let hasFitOthersOnce = false; // only auto-fit the view to everyone once, so it 
 
 // Color mapping (Preserves privacy: only color + role, no personal identity)
 const TYPE_COLORS = {
-    student: '#e74c3c', // Red
-    faculty: '#3498db', // Blue
-    staff:   '#2ecc71', // Green
+    student: '#fb7185', // Rose
+    faculty: '#60a5fa', // Blue
+    staff:   '#34d399', // Emerald
 };
+
+// =====================================================================
+// Small helpers for the badge / button markup (icon + text child spans)
+// =====================================================================
+function setBadgeText(badgeEl, text) {
+    badgeEl.querySelector('.badge-text').textContent = text;
+}
+
+// =====================================================================
+// Mobile controls sheet (slide-up panel behind the ☰ button)
+// =====================================================================
+function toggleMenu() {
+    document.getElementById('controlsSheet').classList.toggle('open');
+    document.getElementById('sheet-scrim').classList.toggle('open');
+}
+
+function closeMenu() {
+    document.getElementById('controlsSheet').classList.remove('open');
+    document.getElementById('sheet-scrim').classList.remove('open');
+}
+
+// The single dot in the mobile top bar summarises what the two full
+// badges show on desktop, so the slim bar still tells you at a glance
+// whether you're live: green = connected, amber = no GPS fix yet.
+function updateStatusDot() {
+    const dot = document.getElementById('statusDot');
+    if (connected) {
+        dot.className = 'status-dot active';
+    } else if (myLat === null) {
+        dot.className = 'status-dot warning';
+    } else {
+        dot.className = 'status-dot';
+    }
+}
 
 // =====================================================================
 // Initialize map
@@ -407,8 +958,15 @@ function initMap(lat, lng) {
         zoomControl: true,
     }).setView([lat, lng], 17);
 
+    // Standard OpenStreetMap tiles — full-color, richly detailed (building
+    // footprints, POI icons, labeled roads, parks, water), free, and no
+    // API key. Of everything tried, this is the closest free match to the
+    // familiar Google Maps look; the abstract dark-canvas basemaps read as
+    // "premium minimal" but not as an actual recognizable map. The app's
+    // own UI (topbar, panels) stays dark and glassy on top of it, which
+    // reads as an app layered over a real map rather than clashing with it.
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
     }).addTo(map);
 
@@ -439,14 +997,14 @@ function setMyLocation(lat, lng, accuracy = null) {
     } else {
         myMarker = L.circleMarker([lat, lng], {
             radius: 10,
-            fillColor: '#f39c12',
-            color: '#ffffff',
+            fillColor: '#fbbf24',
+            color: '#fff7e6',
             weight: 3,
             fillOpacity: 1,
             zIndexOffset: 1000,
         }).addTo(map);
 
-        myMarker.bindTooltip('📍 You', {
+        myMarker.bindTooltip('You', {
             permanent: true,
             direction: 'top',
             offset: [0, -12],
@@ -462,9 +1020,9 @@ function setMyLocation(lat, lng, accuracy = null) {
         } else {
             myAccCircle = L.circle([lat, lng], {
                 radius: accuracy,
-                color: '#3498db',
-                fillColor: '#3498db',
-                fillOpacity: 0.12,
+                color: '#22d3ee',
+                fillColor: '#22d3ee',
+                fillOpacity: 0.1,
                 weight: 1,
             }).addTo(map);
         }
@@ -496,7 +1054,7 @@ function sendLocationToServer() {
 // =====================================================================
 function startGpsTracking() {
     const gpsBadge = document.getElementById('gpsBadge');
-    gpsBadge.textContent = '🛰️ GPS: Requesting…';
+    setBadgeText(gpsBadge, 'GPS: Requesting…');
     gpsBadge.className = 'status-badge';
 
     // iOS Safari (and most mobile browsers) refuse geolocation outright on
@@ -504,17 +1062,17 @@ function startGpsTracking() {
     // silently fails. Catch that case with a specific, actionable message
     // instead of a generic "denied".
     if (window.isSecureContext === false) {
-        gpsBadge.textContent = '🛰️ GPS: Insecure Link';
+        setBadgeText(gpsBadge, 'GPS: Insecure Link');
         gpsBadge.className = 'status-badge warning';
-        showLocHint('⚠️ This link is not secure (http://), so the browser blocks location access entirely — even before asking. Reopen this page using the HTTPS link from "📱 Connect Phone".', false);
+        showLocHint('This link is not secure (http://), so the browser blocks location access entirely — even before asking. Reopen this page using the HTTPS link from "Connect Phone".', false);
         initMap(23.8103, 90.4125);
         return;
     }
 
     if (!('geolocation' in navigator)) {
-        gpsBadge.textContent = '🛰️ GPS: Not Supported';
+        setBadgeText(gpsBadge, 'GPS: Not Supported');
         gpsBadge.className = 'status-badge warning';
-        showLocHint('This browser has no GPS support. Tap "📱 Connect Phone" to join from a phone with real GPS instead.', false);
+        showLocHint('This browser has no GPS support. Tap "Connect Phone" to join from a phone with real GPS instead.', false);
         initMap(23.8103, 90.4125);
         return;
     }
@@ -538,11 +1096,12 @@ function startGpsTracking() {
             const lng = pos.coords.longitude;
             const acc = Math.round(pos.coords.accuracy || 10);
 
-            gpsBadge.textContent = `🛰️ GPS: ±${acc}m`;
+            setBadgeText(gpsBadge, `GPS: ±${acc}m`);
             gpsBadge.className = 'status-badge active';
             hideLocHint();
 
             setMyLocation(lat, lng, acc);
+            updateStatusDot();
         },
         (err) => {
             console.warn('GPS watch error:', err);
@@ -554,27 +1113,27 @@ function startGpsTracking() {
             // GeolocationPositionError codes: 1 = PERMISSION_DENIED,
             // 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT.
             if (err.code === 1) {
-                gpsBadge.textContent = '🛰️ GPS: Permission Denied';
+                setBadgeText(gpsBadge, 'GPS: Permission Denied');
                 if (isIOS) {
                     showLocHint(
-                        '⚠️ Location is blocked for this page. On iPhone: Settings ▸ Privacy & Security ▸ Location Services must be ON, and Settings ▸ Safari ▸ Location must be "Ask" (not "Never"). Then reload this page and tap the button below.',
+                        'Location is blocked for this page. On iPhone: Settings ▸ Privacy & Security ▸ Location Services must be ON, and Settings ▸ Safari ▸ Location must be "Ask" (not "Never"). Then reload this page and tap the button below.',
                         true
                     );
                 } else if (isMobile) {
-                    showLocHint('⚠️ Location permission was denied. Enable it for this site in your browser settings, then reload and tap below.', true);
+                    showLocHint('Location permission was denied. Enable it for this site in your browser settings, then reload and tap below.', true);
                 } else {
                     showLocHint(
-                        '⚠️ MacBook location unavailable. Enable in macOS Settings > Privacy > Location Services, or tap "📱 Connect Phone" to use your phone\'s GPS!',
+                        'MacBook location unavailable. Enable in macOS Settings > Privacy > Location Services, or tap "Connect Phone" to use your phone\'s GPS!',
                         true
                     );
                 }
             } else if (err.code === 3) {
-                gpsBadge.textContent = '🛰️ GPS: Timed Out';
+                setBadgeText(gpsBadge, 'GPS: Timed Out');
                 if (isMobile) {
-                    showLocHint('⚠️ GPS is taking a while to lock (weak signal / indoors?). Still trying — tap below to retry now.', true);
+                    showLocHint('GPS is taking a while to lock (weak signal / indoors?). Still trying — tap below to retry now.', true);
                 } else {
                     showLocHint(
-                        '⚠️ This computer has no GPS chip — it can only approximate location via Wi-Fi, which just timed out. For your real position, tap "📱 Connect Phone" instead.',
+                        'This computer has no GPS chip — it can only approximate location via Wi-Fi, which just timed out. For your real position, tap "Connect Phone" instead.',
                         true
                     );
                 }
@@ -583,12 +1142,12 @@ function startGpsTracking() {
                 // A MacBook (no GPS hardware) failing to resolve a Wi-Fi-based
                 // fix lands here far more often than in the permission-denied
                 // branch above, so it needs the same "use your phone" steer.
-                gpsBadge.textContent = '🛰️ GPS: Unavailable';
+                setBadgeText(gpsBadge, 'GPS: Unavailable');
                 if (isMobile) {
-                    showLocHint('⚠️ Could not get a GPS fix. Make sure Location Services is on for this browser, then tap below to retry.', true);
+                    showLocHint('Could not get a GPS fix. Make sure Location Services is on for this browser, then tap below to retry.', true);
                 } else {
                     showLocHint(
-                        '⚠️ This computer has no GPS chip — Wi-Fi based location failed. Check macOS Settings ▸ Privacy & Security ▸ Location Services is ON and enabled for your browser, or just tap "📱 Connect Phone" to get your real, exact position from your phone instead.',
+                        'This computer has no GPS chip — Wi-Fi based location failed. Check macOS Settings ▸ Privacy & Security ▸ Location Services is ON and enabled for your browser, or just tap "Connect Phone" to get your real, exact position from your phone instead.',
                         true
                     );
                 }
@@ -598,6 +1157,7 @@ function startGpsTracking() {
             if (!map) {
                 initMap(23.8103, 90.4125);
             }
+            updateStatusDot();
         },
         {
             enableHighAccuracy: true,
@@ -640,7 +1200,7 @@ function toggleConnection() {
 
 function connectWS() {
     if (myLat === null) {
-        showLocHint('Waiting for your exact GPS location — this can\'t be set manually.');
+        showLocHint('Waiting for your exact GPS location — this can\'t be set manually.', true);
         return;
     }
 
@@ -657,10 +1217,10 @@ function connectWS() {
     ws.onopen = () => {
         connected = true;
         const btn = document.getElementById('btnConnect');
-        btn.textContent = 'Connected';
+        btn.querySelector('.btn-label').textContent = 'Connected';
         btn.classList.add('connected');
         const statusBadge = document.getElementById('status');
-        statusBadge.textContent = 'Online';
+        setBadgeText(statusBadge, 'Online');
         statusBadge.className = 'status-badge active';
 
         // Send initial location
@@ -669,6 +1229,9 @@ function connectWS() {
         // Keep heartbeat location transmission every 3 seconds
         if (locationSendInterval) clearInterval(locationSendInterval);
         locationSendInterval = setInterval(sendLocationToServer, 3000);
+
+        updateStatusDot();
+        closeMenu(); // you're live — get the sheet out of the way of the map
     };
 
     ws.onmessage = (event) => {
@@ -703,12 +1266,13 @@ function disconnectWS() {
     }
 
     const btn = document.getElementById('btnConnect');
-    btn.textContent = 'Connect';
+    btn.querySelector('.btn-label').textContent = 'Connect';
     btn.classList.remove('connected');
     const statusBadge = document.getElementById('status');
-    statusBadge.textContent = 'Offline';
+    setBadgeText(statusBadge, 'Offline');
     statusBadge.className = 'status-badge';
     document.getElementById('infoType').textContent = '—';
+    updateStatusDot();
 
     // Remove remote markers
     Object.keys(markers).forEach((id) => {
@@ -771,10 +1335,10 @@ function renderLocations(locations) {
             const marker = L.circleMarker([loc.lat, loc.lng], {
                 radius: 8,
                 fillColor: color,
-                color: '#ffffff',
+                color: '#0b0f19',
                 weight: 2,
-                opacity: 0.9,
-                fillOpacity: 0.85,
+                opacity: 0.95,
+                fillOpacity: 0.92,
             });
 
             // Anonymous role tooltip (no name, no student ID)
@@ -817,6 +1381,7 @@ function renderLocations(locations) {
 // Phone Connect Modal & QR Code
 // =====================================================================
 async function openPhoneModal() {
+    closeMenu(); // don't stack the modal on top of the mobile sheet
     const overlay = document.getElementById('phone-modal-overlay');
     overlay.style.display = 'flex';
 
@@ -837,7 +1402,7 @@ async function openPhoneModal() {
         qrContainer.innerHTML = `<img src="${qrApiUrl}" alt="Scan with phone" />`;
     } catch (e) {
         urlBox.textContent = 'Could not retrieve network info.';
-        qrContainer.innerHTML = 'Error loading QR code';
+        qrContainer.innerHTML = '<span class="qr-loading">Error loading QR code</span>';
     }
 }
 
@@ -909,6 +1474,7 @@ function updateInfoPanel() {
 // Auto-start on Load
 // =====================================================================
 window.addEventListener('DOMContentLoaded', () => {
+    updateStatusDot();
     startGpsTracking();
 });
 </script>
