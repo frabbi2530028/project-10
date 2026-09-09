@@ -34,7 +34,7 @@ export default function TopBar({
           <ShieldIcon />
         </div>
         <div className="brand-text">
-          <h1>CampusGuard</h1>
+          <h1>StudentMap</h1>
           <p>Live campus map</p>
         </div>
       </div>

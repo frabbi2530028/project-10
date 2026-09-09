@@ -1,14 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import TopBar from './components/TopBar';
 import MapView from './components/MapView';
 import LocationBanner from './components/LocationBanner';
 import PhoneModal from './components/PhoneModal';
-import { InfoPanel, Legend } from './components/Panels';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useLocationSocket } from './hooks/useLocationSocket';
+import { useViewportHeight } from './hooks/useViewportHeight';
 import { API_BASE } from './config';
 
 export default function App() {
+  useViewportHeight(); // keeps the layout pinned to the real viewport on iOS
+
   const [role, setRole] = useState('student');
   const [wantConnection, setWantConnection] = useState(true); // auto-connect once a fix arrives
   const [people, setPeople] = useState([]);
@@ -25,8 +27,6 @@ export default function App() {
     position,
     onLocations,
   });
-
-  const nearby = useMemo(() => people.filter((p) => p.id !== myId).length, [people, myId]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -103,8 +103,9 @@ export default function App() {
 
       <MapView position={position} people={people} myId={myId} />
 
-      <Legend />
-      <InfoPanel role={role} position={position} nearby={nearby} connected={connected} />
+      {/* The Legend and Live Info panels are intentionally not rendered —
+          they cluttered the map. The components still exist in
+          components/Panels.jsx; render them here again to bring them back. */}
     </>
   );
 }

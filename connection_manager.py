@@ -1,5 +1,5 @@
 """
-WebSocket connection manager for CampusGuard.
+WebSocket connection manager for StudentMap.
 
 Tracks all connected users, their locations, and handles
 broadcasting locations to everyone.

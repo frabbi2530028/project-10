@@ -1,5 +1,5 @@
 """
-CampusGuard — FastAPI backend entry-point.
+StudentMap — FastAPI backend entry-point.
 
 Local:      python main.py           → http://localhost:8000
 Production: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -7,9 +7,9 @@ Production: uvicorn main:app --host 0.0.0.0 --port $PORT
 Environment variables
 ---------------------
 PORT            Port to bind (Render and most PaaS hosts set this).
-ENABLE_TUNNEL   "0" to skip the local Pinggy dev tunnel (set this in prod).
+ENABLE_TUNNEL   "0" to skip the local Cloudflare dev tunnel (set this in prod).
 CORS_ORIGINS    Comma-separated allowed origins for the browser API calls,
-                e.g. "https://campusguard.netlify.app". Defaults to "*".
+                e.g. "https://campusguard-uiu.netlify.app". Defaults to "*".
 """
 
 from __future__ import annotations
@@ -55,17 +55,17 @@ manager = ConnectionManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
-    print("🟢  CampusGuard server starting …")
+    print("🟢  StudentMap server starting …")
     print(f"   Listening on port {PORT}")
     if ENABLE_TUNNEL:
         # Public HTTPS tunnel so a phone can reach a laptop during development
         tunnel.start_tunnel(PORT)
     yield
-    print("🔴  CampusGuard server shutting down …")
+    print("🔴  StudentMap server shutting down …")
     tunnel.stop_tunnel()
 
 
-app = FastAPI(title="CampusGuard", lifespan=lifespan)
+app = FastAPI(title="StudentMap", lifespan=lifespan)
 
 # The React frontend is served from a different origin (Netlify) than this
 # API, so the browser needs explicit permission for the /api/* calls.
@@ -100,7 +100,7 @@ async def root():
         with open("static/index.html") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse(
-        content="<h1>CampusGuard API</h1><p>Backend is running. The UI is deployed separately.</p>"
+        content="<h1>StudentMap API</h1><p>Backend is running. The UI is deployed separately.</p>"
     )
 
 

@@ -42,6 +42,32 @@ export default function MapView({ position, people, myId }) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Leaflet caches its container size at init and only repaints the area it
+  // thinks it has. On iOS the viewport changes constantly as Safari's
+  // toolbars slide in and out, which left the map rendered at a stale size
+  // with an unpainted black band below it. A ResizeObserver on the container
+  // catches every cause of a size change — toolbars, rotation, keyboard —
+  // and invalidateSize() makes Leaflet re-measure and fill the space.
+  useEffect(() => {
+    const map = mapRef.current;
+    const el = containerRef.current;
+    if (!map || !el) return undefined;
+
+    const refresh = () => map.invalidateSize();
+
+    const observer = new ResizeObserver(refresh);
+    observer.observe(el);
+
+    window.addEventListener('orientationchange', refresh);
+    window.visualViewport?.addEventListener('resize', refresh);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('orientationchange', refresh);
+      window.visualViewport?.removeEventListener('resize', refresh);
+    };
+  }, []);
+
   // Own position: marker + accuracy circle.
   useEffect(() => {
     const map = mapRef.current;
@@ -76,8 +102,8 @@ export default function MapView({ position, people, myId }) {
       } else {
         myAccCircleRef.current = L.circle([lat, lng], {
           radius: accuracy,
-          color: '#22d3ee',
-          fillColor: '#22d3ee',
+          color: '#f59e0b',
+          fillColor: '#f59e0b',
           fillOpacity: 0.1,
           weight: 1,
         }).addTo(map);

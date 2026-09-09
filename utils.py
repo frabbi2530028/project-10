@@ -1,5 +1,5 @@
 """
-Utility functions for CampusGuard.
+Utility functions for StudentMap.
 Haversine distance calculation and system constants.
 """
 

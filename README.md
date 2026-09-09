@@ -1,4 +1,4 @@
-# CampusGuard
+# StudentMap
 
 Real-time campus map showing the live, exact GPS positions of everyone
 currently connected — anonymously, as coloured dots by role (student,
