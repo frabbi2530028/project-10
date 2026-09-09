@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>CampusGuard — Live Campus Map & Location System</title>
+
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""
+    />
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        /* ── Top bar ─────────────────────────────────────── */
+        #topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: #1a1a2e;
+            border-bottom: 2px solid #16213e;
+            z-index: 1000;
+            position: relative;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        #topbar h1 {
+            font-size: 1.15rem;
+            color: #e94560;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #topbar .controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        #topbar select, #topbar button {
+            padding: 7px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        #topbar select {
+            background: #16213e;
+            color: #e0e0e0;
+            outline: none;
+            border: 1px solid #0f3460;
+        }
+        .btn-connect {
+            background: #0f3460;
+            color: #e0e0e0;
+        }
+        .btn-connect:hover { background: #1a4a7a; }
+        .btn-connect.connected {
+            background: #2ecc71;
+            color: #111;
+        }
+        .btn-phone {
+            background: #00b4d8;
+            color: #0b1d3a;
+            font-weight: 600;
+        }
+        .btn-phone:hover { background: #90e0ef; }
+        .btn-stress {
+            background: #e94560;
+            color: #fff;
+            font-weight: 600;
+        }
+        .btn-stress:hover { background: #c0392b; }
+        .btn-stress:disabled {
+            background: #444;
+            color: #888;
+            cursor: not-allowed;
+        }
+        .btn-sim {
+            background: #6c5ce7;
+            color: #fff;
+        }
+        .btn-sim:hover { background: #a29bfe; }
+
+        /* ── Status badges ───────────────────────────────── */
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .status-badge.active { background: #27ae60; color: #fff; }
+        .status-badge.warning { background: #d35400; color: #fff; }
+
+        /* ── Map ─────────────────────────────────────────── */
+        #map {
+            width: 100vw;
+            height: calc(100vh - 52px);
+        }
+
+        /* ── Alert banner (stress signal received) ──────────── */
+        #alert-banner {
+            display: none;
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e74c3c;
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            z-index: 2000;
+            box-shadow: 0 4px 20px rgba(231, 76, 60, 0.6);
+            animation: pulse-alert 1s ease-in-out infinite;
+            text-align: center;
+            max-width: 90%;
+        }
+        @keyframes pulse-alert {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50%      { transform: translateX(-50%) scale(1.03); }
+        }
+
+        /* ── Location hint banner ────────────────────────── */
+        #loc-banner {
+            display: none;
+            position: fixed;
+            top: 65px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(26, 26, 46, 0.95);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            z-index: 1500;
+            text-align: center;
+            border: 1px solid #00b4d8;
+            box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
+            max-width: 480px;
+        }
+
+        /* ── Modal (Phone Connect) ───────────────────────── */
+        #phone-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            z-index: 3000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-card {
+            background: #1a1a2e;
+            border: 2px solid #00b4d8;
+            border-radius: 14px;
+            padding: 24px;
+            width: 92%;
+            max-width: 440px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            animation: modal-appear 0.25s ease-out;
+        }
+        @keyframes modal-appear {
+            from { transform: scale(0.9); opacity: 0; }
+            to   { transform: scale(1); opacity: 1; }
+        }
+        .modal-card h2 {
+            font-size: 1.25rem;
+            color: #00b4d8;
+            margin-bottom: 8px;
+        }
+        .modal-card p {
+            font-size: 0.85rem;
+            color: #b0b0b0;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+        .qr-container {
+            background: #fff;
+            padding: 12px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-bottom: 14px;
+            min-height: 200px;
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .qr-container img {
+            width: 190px;
+            height: 190px;
+            display: block;
+        }
+        .url-box {
+            background: #16213e;
+            padding: 10px 14px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #48dbfb;
+            margin-bottom: 14px;
+            border: 1px dashed #0f3460;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .modal-actions button {
+            padding: 9px 18px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-copy { background: #00b4d8; color: #111; }
+        .btn-close-modal { background: #444; color: #fff; }
+
+        /* ── Legend ───────────────────────────────────────── */
+        .legend {
+            position: fixed;
+            bottom: 24px;
+            left: 18px;
+            background: rgba(26, 26, 46, 0.92);
+            padding: 12px 16px;
+            border-radius: 10px;
+            z-index: 1000;
+            font-size: 0.8rem;
+            line-height: 1.7;
+            border: 1px solid #16213e;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        .legend-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* ── Info panel ──────────────────────────────────── */
+        .info-panel {
+            position: fixed;
+            bottom: 24px;
+            right: 18px;
+            background: rgba(26, 26, 46, 0.92);
+            padding: 12px 16px;
+            border-radius: 10px;
+            z-index: 1000;
+            font-size: 0.78rem;
+            border: 1px solid #16213e;
+            min-width: 170px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        .info-panel h3 {
+            margin-bottom: 4px;
+            color: #e94560;
+            font-size: 0.82rem;
+        }
+        .info-panel p { margin: 2px 0; }
+
+        /* ── Custom Leaflet Tooltip for You ──────────────── */
+        .you-tooltip {
+            background: rgba(233, 69, 96, 0.95) !important;
+            border: none !important;
+            color: #fff !important;
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 3px 8px !important;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .you-tooltip::before {
+            border-top-color: rgba(233, 69, 96, 0.95) !important;
+        }
+
+        /* ── Responsive adjustments for mobile ───────────── */
+        @media (max-width: 650px) {
+            #topbar h1 { font-size: 1rem; }
+            #topbar { padding: 6px 10px; }
+            #topbar select, #topbar button { font-size: 0.75rem; padding: 5px 8px; }
+            .legend { bottom: 12px; left: 10px; font-size: 0.72rem; padding: 8px 12px; }
+            .info-panel { bottom: 12px; right: 10px; font-size: 0.72rem; padding: 8px 12px; min-width: 140px; }
+            .btn-sim { display: none; } /* Hide simulate buttons on mobile */
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Top bar ─────────────────────────────────────────── -->
+<div id="topbar">
+    <h1>🛡️ CampusGuard</h1>
+    <div class="controls">
+        <select id="userType" onchange="onRoleChanged()">
+            <option value="student">🔴 Student</option>
+            <option value="faculty">🔵 Faculty</option>
+            <option value="staff">🟢 Staff</option>
+        </select>
+        <button id="btnConnect" class="btn-connect" onclick="toggleConnection()">
+            Connect
+        </button>
+        <button id="btnPhone" class="btn-phone" onclick="openPhoneModal()">
+            📱 Connect Phone
+        </button>
+        <button id="btnStress" class="btn-stress" onclick="sendStressSignal()" disabled>
+            🚨 Stress Signal
+        </button>
+        <button class="btn-sim" onclick="spawnSimulated()">
+            👥 Add Simulated
+        </button>
+        <button class="btn-sim" onclick="clearSimulated()" style="background:#c0392b;">
+            🗑️ Clear
+        </button>
+        <span id="gpsBadge" class="status-badge">🛰️ GPS: Waiting</span>
+        <span id="status" class="status-badge">Offline</span>
+    </div>
+</div>
+
+<!-- ── Alert banner (stress signal received) ──────────── -->
+<div id="alert-banner">
+    🚨 STRESS SIGNAL — Someone nearby needs help!
+</div>
+
+<!-- ── Location info / hint banner ────────────────────── -->
+<div id="loc-banner">
+    📍 <span id="loc-banner-text">Obtaining your GPS location…</span>
+</div>
+
+<!-- ── Phone Connect Modal ────────────────────────────── -->
+<div id="phone-modal-overlay" onclick="onOverlayClick(event)">
+    <div class="modal-card">
+        <h2>📱 Connect Your Phone</h2>
+        <p>
+            Scan this QR code with your phone's camera. Your phone's real satellite GPS will activate and transmit your live location to this map!
+        </p>
+        <div class="qr-container" id="qrContainer">
+            <span style="color:#666; font-size:0.85rem;">Generating QR Code…</span>
+        </div>
+        <div class="url-box" id="tunnelUrlBox">
+            Fetching secure HTTPS link…
+        </div>
+        <div class="modal-actions">
+            <button class="btn-copy" onclick="copyTunnelUrl()">📋 Copy Link</button>
+            <button class="btn-close-modal" onclick="closePhoneModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Map Container ───────────────────────────────────── -->
+<div id="map"></div>
+
+<!-- ── Legend ──────────────────────────────────────────── -->
+<div class="legend">
+    <div><span class="legend-dot" style="background:#e74c3c"></span>Student</div>
+    <div><span class="legend-dot" style="background:#3498db"></span>Faculty</div>
+    <div><span class="legend-dot" style="background:#2ecc71"></span>Staff</div>
+    <div style="margin-top:4px; border-top:1px solid #333; padding-top:4px;">
+        <span class="legend-dot" style="background:#f39c12; border:2px solid #fff;"></span>📍 You
+    </div>
+</div>
+
+<!-- ── Info panel ──────────────────────────────────────── -->
+<div class="info-panel">
+    <h3>Live Info</h3>
+    <p>Role: <span id="infoType">—</span></p>
+    <p>GPS Acc: <span id="infoAcc">—</span></p>
+    <p>Lat: <span id="infoLat">—</span></p>
+    <p>Lng: <span id="infoLng">—</span></p>
+    <p>Nearby People: <span id="infoNearby">0</span></p>
+</div>
+
+<!-- ── Leaflet JS ─────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<script>
+// =====================================================================
+// State
+// =====================================================================
+let ws = null;
+let myId = null;
+let myType = "student";
+let myLat = null;
+let myLng = null;
+let myAccuracy = null;
+let connected = false;
+let gpsWatchId = null;
+let locationSendInterval = null;
+let publicHttpsUrl = null;
+
+// Leaflet map & markers
+let map = null;
+let markers = {};       // user_id -> L.circleMarker
+let myMarker = null;    // our own distinct marker
+let myAccCircle = null; // accuracy radius circle
+let stressCircle = null;
+
+// Color mapping (Preserves privacy: only color + role, no personal identity)
+const TYPE_COLORS = {
+    student: '#e74c3c', // Red
+    faculty: '#3498db', // Blue
+    staff:   '#2ecc71', // Green
+};
+
+// =====================================================================
+// Initialize map
+// =====================================================================
+function initMap(lat, lng) {
+    if (map) return;
+    map = L.map('map', {
+        zoomControl: true,
+    }).setView([lat, lng], 17);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+    }).addTo(map);
+
+    // Allow clicking on map as manual fallback if device has no GPS
+    map.on('click', function (e) {
+        setMyLocation(e.latlng.lat, e.latlng.lng, 10, true);
+    });
+}
+
+// =====================================================================
+// Set My Location (from GPS or fallback)
+// =====================================================================
+function setMyLocation(lat, lng, accuracy = null, isManual = false) {
+    myLat = lat;
+    myLng = lng;
+    myAccuracy = accuracy;
+
+    updateInfoPanel();
+
+    if (!map) {
+        initMap(lat, lng);
+    }
+
+    // Update or create "You" marker
+    if (myMarker) {
+        myMarker.setLatLng([lat, lng]);
+    } else {
+        myMarker = L.circleMarker([lat, lng], {
+            radius: 10,
+            fillColor: '#f39c12',
+            color: '#ffffff',
+            weight: 3,
+            fillOpacity: 1,
+            zIndexOffset: 1000,
+        }).addTo(map);
+
+        myMarker.bindTooltip('📍 You', {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -12],
+            className: 'you-tooltip',
+        });
+    }
+
+    // Render accuracy circle if GPS provides it
+    if (accuracy && accuracy < 2000) {
+        if (myAccCircle) {
+            myAccCircle.setLatLng([lat, lng]);
+            myAccCircle.setRadius(accuracy);
+        } else {
+            myAccCircle = L.circle([lat, lng], {
+                radius: accuracy,
+                color: '#3498db',
+                fillColor: '#3498db',
+                fillOpacity: 0.12,
+                weight: 1,
+            }).addTo(map);
+        }
+    }
+
+    // Auto-center map on first lock
+    if (!isManual) {
+        map.panTo([lat, lng]);
+    }
+
+    // Auto-connect to WebSocket if not connected yet
+    if (!connected) {
+        connectWS();
+    } else {
+        sendLocationToServer();
+    }
+}
+
+// =====================================================================
+// Send location to server
+// =====================================================================
+function sendLocationToServer() {
+    if (ws && ws.readyState === WebSocket.OPEN && myLat !== null) {
+        ws.send(JSON.stringify({
+            action: 'location',
+            lat: myLat,
+            lng: myLng,
+        }));
+    }
+}
+
+// =====================================================================
+// Automatic Real-Time GPS Tracking
+// =====================================================================
+function startGpsTracking() {
+    const gpsBadge = document.getElementById('gpsBadge');
+    gpsBadge.textContent = '🛰️ GPS: Requesting…';
+
+    if (!('geolocation' in navigator)) {
+        gpsBadge.textContent = '🛰️ GPS: Not Supported';
+        gpsBadge.className = 'status-badge warning';
+        showLocHint('GPS not supported. Click on the map to set location.');
+        initMap(23.8103, 90.4125);
+        return;
+    }
+
+    // Immediate high-accuracy GPS watch
+    gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const acc = Math.round(pos.coords.accuracy || 10);
+
+            gpsBadge.textContent = `🛰️ GPS: ±${acc}m`;
+            gpsBadge.className = 'status-badge active';
+            hideLocHint();
+
+            setMyLocation(lat, lng, acc, false);
+        },
+        (err) => {
+            console.warn('GPS watch error:', err);
+            gpsBadge.textContent = '🛰️ GPS: Off/Denied';
+            gpsBadge.className = 'status-badge warning';
+
+            // Check if on MacBook vs phone
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (!isMobile) {
+                showLocHint(
+                    '⚠️ MacBook Wi-Fi location unavailable. Enable in macOS Settings > Privacy > Location Services, or tap "📱 Connect Phone" to use your phone\'s GPS!'
+                );
+            } else {
+                showLocHint('⚠️ Please enable GPS / Location permissions in your phone browser settings.');
+            }
+
+            // Fallback default map center so user can click
+            if (!map) {
+                initMap(23.8103, 90.4125);
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 12000,
+        }
+    );
+}
+
+function showLocHint(text) {
+    const b = document.getElementById('loc-banner');
+    document.getElementById('loc-banner-text').textContent = text;
+    b.style.display = 'block';
+}
+
+function hideLocHint() {
+    document.getElementById('loc-banner').style.display = 'none';
+}
+
+// =====================================================================
+// WebSocket Connection
+// =====================================================================
+function toggleConnection() {
+    if (connected) {
+        disconnectWS();
+    } else {
+        connectWS();
+    }
+}
+
+function connectWS() {
+    if (myLat === null) {
+        showLocHint('Please wait for GPS lock, or click on the map to drop your location!');
+        return;
+    }
+
+    myType = document.getElementById('userType').value;
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${protocol}//${location.host}/ws/${myType}`;
+
+    if (ws) {
+        ws.close();
+    }
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+        connected = true;
+        const btn = document.getElementById('btnConnect');
+        btn.textContent = 'Connected';
+        btn.classList.add('connected');
+        document.getElementById('btnStress').disabled = false;
+        const statusBadge = document.getElementById('status');
+        statusBadge.textContent = 'Online';
+        statusBadge.className = 'status-badge active';
+
+        // Send initial location
+        sendLocationToServer();
+
+        // Keep heartbeat location transmission every 3 seconds
+        if (locationSendInterval) clearInterval(locationSendInterval);
+        locationSendInterval = setInterval(sendLocationToServer, 3000);
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            handleServerMessage(msg);
+        } catch (e) {
+            console.error('Error parsing WS message:', e);
+        }
+    };
+
+    ws.onclose = () => {
+        disconnectWS();
+    };
+
+    ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+    };
+}
+
+function disconnectWS() {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    connected = false;
+    myId = null;
+
+    if (locationSendInterval) {
+        clearInterval(locationSendInterval);
+        locationSendInterval = null;
+    }
+
+    const btn = document.getElementById('btnConnect');
+    btn.textContent = 'Connect';
+    btn.classList.remove('connected');
+    document.getElementById('btnStress').disabled = true;
+    const statusBadge = document.getElementById('status');
+    statusBadge.textContent = 'Offline';
+    statusBadge.className = 'status-badge';
+    document.getElementById('infoType').textContent = '—';
+
+    // Remove remote markers
+    Object.keys(markers).forEach((id) => {
+        if (markers[id]) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
+        }
+    });
+}
+
+function onRoleChanged() {
+    // If role changed while connected, reconnect with new role
+    if (connected) {
+        connectWS();
+    }
+}
+
+// =====================================================================
+// Handle Server Messages (Real-Time Location & Stress Signals)
+// =====================================================================
+function handleServerMessage(msg) {
+    switch (msg.event) {
+        case 'welcome':
+            myId = msg.data.user_id;
+            myType = msg.data.user_type;
+            document.getElementById('infoType').textContent = myType.toUpperCase();
+            break;
+
+        case 'locations':
+            renderLocations(msg.data);
+            break;
+
+        case 'stress_signal':
+            showStressAlert(msg.data);
+            break;
+
+        case 'signal_sent':
+            showSignalConfirmation(msg.data.notified);
+            break;
+
+        case 'error':
+            console.error('Server error:', msg.data.message);
+            break;
+    }
+}
+
+// =====================================================================
+// Render Location Dots (Privacy Preserved: Color Only, No Identity)
+// =====================================================================
+function renderLocations(locations) {
+    if (!map) return;
+
+    const activeIds = new Set();
+    let nearbyCount = 0;
+
+    locations.forEach((loc) => {
+        activeIds.add(loc.id);
+
+        // Don't render ourselves as a remote dot — we have myMarker
+        if (loc.id === myId) return;
+
+        const color = TYPE_COLORS[loc.type] || '#ffffff';
+        const roleLabel = loc.type.charAt(0).toUpperCase() + loc.type.slice(1);
+
+        if (markers[loc.id]) {
+            markers[loc.id].setLatLng([loc.lat, loc.lng]);
+        } else {
+            const marker = L.circleMarker([loc.lat, loc.lng], {
+                radius: 8,
+                fillColor: color,
+                color: '#ffffff',
+                weight: 2,
+                opacity: 0.9,
+                fillOpacity: 0.85,
+            });
+
+            // Anonymous role tooltip (no name, no student ID)
+            marker.bindTooltip(roleLabel, {
+                permanent: false,
+                direction: 'top',
+                offset: [0, -8],
+            });
+
+            marker.addTo(map);
+            markers[loc.id] = marker;
+        }
+
+        nearbyCount++;
+    });
+
+    // Remove users who disconnected
+    Object.keys(markers).forEach((id) => {
+        if (!activeIds.has(id)) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
+        }
+    });
+
+    document.getElementById('infoNearby').textContent = nearbyCount;
+}
+
+// =====================================================================
+// Stress Signal Functionality
+// =====================================================================
+function sendStressSignal() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    ws.send(JSON.stringify({
+        action: 'stress_signal',
+        radius: 750, // 750 meters
+    }));
+
+    // Show radius on sender's map
+    if (myLat !== null && map) {
+        if (stressCircle) map.removeLayer(stressCircle);
+        stressCircle = L.circle([myLat, myLng], {
+            radius: 750,
+            color: '#e94560',
+            fillColor: '#e94560',
+            fillOpacity: 0.15,
+            weight: 2,
+            dashArray: '6, 6',
+        }).addTo(map);
+
+        setTimeout(() => {
+            if (stressCircle) {
+                map.removeLayer(stressCircle);
+                stressCircle = null;
+            }
+        }, 12000);
+    }
+}
+
+function showStressAlert(data) {
+    const banner = document.getElementById('alert-banner');
+    const role = data.sender_type.charAt(0).toUpperCase() + data.sender_type.slice(1);
+    banner.innerHTML = `🚨 <strong>DISTRESS ALERT</strong>: A ${role} within ${Math.round(data.radius)}m needs assistance!`;
+    banner.style.display = 'block';
+
+    if (map) {
+        const circle = L.circle([data.lat, data.lng], {
+            radius: data.radius,
+            color: '#e74c3c',
+            fillColor: '#e74c3c',
+            fillOpacity: 0.2,
+            weight: 3,
+        }).addTo(map);
+
+        setTimeout(() => map.removeLayer(circle), 15000);
+    }
+
+    setTimeout(() => {
+        banner.style.display = 'none';
+    }, 10000);
+}
+
+function showSignalConfirmation(notified) {
+    const banner = document.getElementById('alert-banner');
+    banner.innerHTML = `✅ Stress signal broadcasted! Notified <strong>${notified}</strong> nearby person(s).`;
+    banner.style.display = 'block';
+    banner.style.background = '#27ae60';
+
+    setTimeout(() => {
+        banner.style.display = 'none';
+        banner.style.background = '#e74c3c';
+    }, 5000);
+}
+
+// =====================================================================
+// Phone Connect Modal & QR Code
+// =====================================================================
+async function openPhoneModal() {
+    const overlay = document.getElementById('phone-modal-overlay');
+    overlay.style.display = 'flex';
+
+    const qrContainer = document.getElementById('qrContainer');
+    const urlBox = document.getElementById('tunnelUrlBox');
+
+    try {
+        const resp = await fetch('/api/network-info');
+        const info = await resp.json();
+
+        const targetUrl = info.public_https_url || info.local_ip_url;
+        publicHttpsUrl = targetUrl;
+
+        urlBox.innerHTML = `<strong>${targetUrl}</strong>`;
+
+        // Render QR Code using high-reliability QR image API
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(targetUrl)}`;
+        qrContainer.innerHTML = `<img src="${qrApiUrl}" alt="Scan with phone" />`;
+    } catch (e) {
+        urlBox.textContent = 'Could not retrieve network info.';
+        qrContainer.innerHTML = 'Error loading QR code';
+    }
+}
+
+function closePhoneModal() {
+    document.getElementById('phone-modal-overlay').style.display = 'none';
+}
+
+function onOverlayClick(e) {
+    if (e.target.id === 'phone-modal-overlay') {
+        closePhoneModal();
+    }
+}
+
+function copyTunnelUrl() {
+    if (publicHttpsUrl) {
+        navigator.clipboard.writeText(publicHttpsUrl);
+        alert('Copied link to clipboard! You can paste it into your phone browser:\n' + publicHttpsUrl);
+    }
+}
+
+// =====================================================================
+// Simulated Users (for testing campus density)
+// =====================================================================
+async function spawnSimulated() {
+    if (myLat === null) {
+        alert('Waiting for GPS location lock…');
+        return;
+    }
+
+    try {
+        await fetch('/api/simulate/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                center_lat: myLat,
+                center_lng: myLng,
+                radius_meters: 600,
+                count: 10,
+            }),
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function clearSimulated() {
+    try {
+        await fetch('/api/simulate', { method: 'DELETE' });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// =====================================================================
+// Info Panel Updates
+// =====================================================================
+function updateInfoPanel() {
+    if (myLat !== null) {
+        document.getElementById('infoLat').textContent = myLat.toFixed(5);
+        document.getElementById('infoLng').textContent = myLng.toFixed(5);
+    }
+    if (myAccuracy !== null) {
+        document.getElementById('infoAcc').textContent = `±${Math.round(myAccuracy)}m`;
+    }
+    document.getElementById('infoType').textContent = (myType || 'Student').toUpperCase();
+}
+
+// =====================================================================
+// Auto-start on Load
+// =====================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    startGpsTracking();
+});
+</script>
+
+</body>
+</html>
