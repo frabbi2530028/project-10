@@ -20,6 +20,7 @@ The tunnel is watched and restarted if it dies, and `get_public_url()`
 returns None while no tunnel is live, so callers never advertise a dead URL.
 """
 
+import os
 import re
 import shutil
 import socket
@@ -42,6 +43,11 @@ _HEALTH_GRACE_SECONDS = 90      # let a new tunnel settle before judging it
 _HEALTH_INTERVAL_SECONDS = 60
 _HEALTH_TIMEOUT = 10
 _HEALTH_FAILURES_BEFORE_RESTART = 3   # ~3 min of real unreachability
+
+# Restarting the tunnel changes the public hostname, which breaks any already
+# deployed frontend that has the old one compiled in. That is a worse outcome
+# than a temporarily slow tunnel, so unhealthy-restart is opt-in.
+_RESTART_ON_UNHEALTHY = os.environ.get("TUNNEL_RESTART_ON_UNHEALTHY", "0") in ("1", "true", "True")
 
 # cloudflared prints the assigned hostname to stderr during startup.
 _URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -154,14 +160,30 @@ def _health_loop(process: subprocess.Popen) -> None:
             continue
 
         failures += 1
-        if failures >= _HEALTH_FAILURES_BEFORE_RESTART:
-            print("⚠️  Tunnel stopped responding (network change?) — restarting it …")
-            _public_url = None  # nothing should advertise a dead URL
-            try:
-                process.terminate()
-            except Exception:
-                pass
-            return
+        if failures < _HEALTH_FAILURES_BEFORE_RESTART:
+            continue
+
+        if not _RESTART_ON_UNHEALTHY:
+            # Report it, but don't act. Restarting mints a brand new hostname,
+            # and any deployed frontend has the old one compiled in — so an
+            # unnecessary restart takes the whole site down until it is
+            # rebuilt and redeployed. A sluggish tunnel usually recovers on
+            # its own; a rotated URL never does. Losing the URL is the worse
+            # failure, so by default we leave the tunnel alone and only let
+            # process death trigger a respawn.
+            print("⚠️  Tunnel looks unresponsive, but leaving it alone "
+                  "(restarting would change the public URL). "
+                  "Set TUNNEL_RESTART_ON_UNHEALTHY=1 to restart instead.")
+            failures = 0
+            continue
+
+        print("⚠️  Tunnel stopped responding (network change?) — restarting it …")
+        _public_url = None  # nothing should advertise a dead URL
+        try:
+            process.terminate()
+        except Exception:
+            pass
+        return
 
 
 def _watchdog_loop(local_port: int) -> None:
