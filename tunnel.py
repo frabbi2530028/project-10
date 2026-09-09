@@ -22,9 +22,12 @@ returns None while no tunnel is live, so callers never advertise a dead URL.
 
 import re
 import shutil
+import socket
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.request
 from typing import Optional
 
 _tunnel_process: Optional[subprocess.Popen] = None
@@ -33,6 +36,11 @@ _stop_requested = False
 _watchdog_thread: Optional[threading.Thread] = None
 
 _RECONNECT_DELAY_SECONDS = 3
+
+# Active health checking of the tunnel itself (see _health_loop).
+_HEALTH_INTERVAL_SECONDS = 20
+_HEALTH_TIMEOUT = 8
+_HEALTH_FAILURES_BEFORE_RESTART = 2
 
 # cloudflared prints the assigned hostname to stderr during startup.
 _URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
@@ -84,6 +92,58 @@ def _spawn_tunnel_process(local_port: int) -> Optional[subprocess.Popen]:
         return None
 
 
+def _tunnel_is_reachable(url: str, local_port: int) -> bool:
+    """Is the advertised tunnel URL actually serving our app right now?"""
+    host = url.split("://", 1)[-1]
+    try:
+        socket.getaddrinfo(host, 443)
+    except OSError:
+        return False  # hostname is gone — the tunnel was torn down
+
+    try:
+        with urllib.request.urlopen(f"{url}/api/status", timeout=_HEALTH_TIMEOUT) as resp:
+            return resp.status == 200
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False
+
+
+def _health_loop(process: subprocess.Popen, local_port: int) -> None:
+    """
+    Actively verify the tunnel, not just the process.
+
+    cloudflared can keep running with a tunnel that no longer works — most
+    often after the laptop changes Wi-Fi network or wakes from sleep. Watching
+    only for process exit misses that entirely and leaves clients pointed at a
+    hostname that no longer resolves, which looks to them like "server
+    unreachable" while everything appears fine locally. When the URL stops
+    answering we kill cloudflared so the watchdog respawns it and picks up a
+    fresh hostname.
+    """
+    global _public_url
+
+    failures = 0
+    while not _stop_requested and process.poll() is None:
+        time.sleep(_HEALTH_INTERVAL_SECONDS)
+
+        url = _public_url
+        if not url or process.poll() is not None or _stop_requested:
+            continue
+
+        if _tunnel_is_reachable(url, local_port):
+            failures = 0
+            continue
+
+        failures += 1
+        if failures >= _HEALTH_FAILURES_BEFORE_RESTART:
+            print("⚠️  Tunnel stopped responding (network change?) — restarting it …")
+            _public_url = None  # nothing should advertise a dead URL
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            return
+
+
 def _watchdog_loop(local_port: int) -> None:
     """Keep a tunnel alive: (re)spawn it whenever it exits, until stopped."""
     global _tunnel_process, _public_url
@@ -101,7 +161,12 @@ def _watchdog_loop(local_port: int) -> None:
         reader = threading.Thread(target=_read_stream, args=(process,), daemon=True)
         reader.start()
 
-        process.wait()  # blocks until the tunnel dies
+        health = threading.Thread(
+            target=_health_loop, args=(process, local_port), daemon=True
+        )
+        health.start()
+
+        process.wait()  # blocks until the tunnel dies (or health check kills it)
         reader.join(timeout=1)
 
         if _stop_requested:
