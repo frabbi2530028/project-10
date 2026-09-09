@@ -3,14 +3,14 @@ UIU student credential checking.
 
 A UIU student email looks like:
 
-    frabbi2530028@bsds.uiu.ac.bd
-    └─┬──┘└┬┘└┬─┘ └─┬┘
-     name  │  roll  department
+    name2510001@dept.uiu.ac.bd
+    └─┬┘└┬┘└┬─┘ └─┬┘
+    name │  roll  department
         trimester
 
 and the matching student ID looks like:
 
-    0152530028
+    0102510001
     └┬┘└┬┘└┬─┘
      │   │  roll
      │  trimester
@@ -38,7 +38,7 @@ from typing import Dict, Optional, Tuple
 # which are trimester (3) + roll (4).
 _LOCAL_RE = re.compile(r"^([a-z][a-z.\-]*)(\d{7})$")
 
-# Department subdomain, e.g. "bsds" in bsds.uiu.ac.bd
+# Department subdomain, e.g. "dept" in dept.uiu.ac.bd
 _DOMAIN_RE = re.compile(r"^([a-z]+)\.uiu\.ac\.bd$")
 
 # Student ID: department code (3) + trimester (3) + roll (4)
@@ -51,10 +51,10 @@ class Student:
 
     email: str
     student_id: str
-    department: str       # from the email domain, e.g. "bsds"
-    department_code: str  # from the student ID, e.g. "015"
-    trimester: str        # e.g. "253"
-    roll: str             # e.g. "0028"
+    department: str       # from the email domain, e.g. "dept"
+    department_code: str  # from the student ID, e.g. "010"
+    trimester: str        # e.g. "251"
+    roll: str             # e.g. "0001"
 
     def public(self) -> dict:
         """The subset safe to hand back to the browser."""
@@ -94,12 +94,12 @@ def validate_student(email: str, student_id: str) -> Tuple[Optional[Student], Op
     if not local_match:
         return None, (
             "That UIU email doesn't have the expected form — it should be your "
-            "name followed by 7 digits, e.g. frabbi2530028@bsds.uiu.ac.bd."
+            "name followed by 7 digits, e.g. name2510001@dept.uiu.ac.bd."
         )
 
     id_match = _STUDENT_ID_RE.match(student_id)
     if not id_match:
-        return None, "A student ID is 10 digits, e.g. 0152530028."
+        return None, "A student ID is 10 digits, e.g. 0102510001."
 
     email_digits = local_match.group(2)          # trimester + roll, 7 digits
     department_code, trimester, roll = id_match.groups()

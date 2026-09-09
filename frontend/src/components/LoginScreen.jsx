@@ -58,7 +58,7 @@ export default function LoginScreen({ onAuthenticated }) {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck="false"
-            placeholder="frabbi2530028@bsds.uiu.ac.bd"
+            placeholder="Enter your UIU email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -71,7 +71,7 @@ export default function LoginScreen({ onAuthenticated }) {
             type="text"
             inputMode="numeric"
             autoComplete="username"
-            placeholder="0152530028"
+            placeholder="Enter your student ID"
             value={studentId}
             onChange={(e) => setStudentId(e.target.value.replace(/\D/g, '').slice(0, 10))}
             required
