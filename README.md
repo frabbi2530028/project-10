@@ -43,9 +43,24 @@ variables or CORS setup are needed locally.
 
 Note that browsers only allow GPS on a secure origin. `localhost` counts as
 secure, but a phone hitting your laptop's LAN IP over plain HTTP does not —
-that's what the built-in Pinggy tunnel is for. It starts automatically and
+that's what the built-in Cloudflare tunnel is for. It starts automatically and
 prints a public HTTPS URL; the "Share Link" button shows it as a QR code.
 Set `ENABLE_TUNNEL=0` to skip it.
+
+The tunnel needs `cloudflared` on your PATH (`brew install cloudflared`).
+Without it the app still runs locally — phones just can't reach it.
+
+## Tests
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+The suite covers the credential rules, the session tokens, the connection
+manager's broadcast behaviour, and the HTTP + WebSocket endpoints. It needs no
+network and no running server.
 
 ## Deploying
 
@@ -56,8 +71,7 @@ Set `ENABLE_TUNNEL=0` to skip it.
    the repo. It reads `render.yaml` and creates the service.
 3. Wait for the deploy, then note the URL, e.g.
    `https://studentmap-api.onrender.com`.
-4. Check it: visiting `/api/status` should return
-   `{"active_users":0,"status":"running"}`.
+4. Check it: visiting `/api/status` should report `"status":"running"`.
 
 Render's free tier sleeps after ~15 minutes of no traffic, so the first
 request after an idle period takes ~50s to wake the server.
@@ -89,13 +103,23 @@ Once you know the Netlify URL, set `CORS_ORIGINS` on the Render service to it
 |---|---|---|
 | `PORT` | `8000` | Port to bind. Render sets this automatically. |
 | `ENABLE_TUNNEL` | `1` | `0` disables the local dev tunnel. Off in production. |
+| `ENABLE_SIMULATION` | `1` | `0` disables the `/api/simulate*` test endpoints. Off in production. |
 | `CORS_ORIGINS` | `*` | Comma-separated allowed origins for `/api/*` calls. |
+| `CURRENT_TRIMESTER` | *(derived from today's date)* | Overrides which trimester the login check treats as current. |
 
 **Frontend**
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `VITE_BACKEND_URL` | *(unset)* | Backend base URL. Unset = same origin (local dev proxy). |
+
+## Simulated users
+
+`POST /api/simulate/batch` scatters fake dots around a point, which is the
+quickest way to see the map populated without rounding up ten people. The
+controls appear in the top bar in a dev build only, and `render.yaml` sets
+`ENABLE_SIMULATION=0` so the endpoints are closed in production — otherwise
+anyone with the URL could litter the live map.
 
 ## Privacy note
 

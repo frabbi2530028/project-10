@@ -1,0 +1,7 @@
+# Development and test dependencies.
+#   pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest
+pytest-asyncio
+httpx          # required by fastapi.testclient
