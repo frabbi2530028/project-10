@@ -59,15 +59,20 @@ export default function TopBar({
           <span>Share Link</span>
         </button>
 
-        <button className="btn-sim" onClick={onSpawnSimulated}>
-          <UsersIcon />
-          <span>Add Simulated</span>
-        </button>
+        {/* Testing-only, and absent entirely from a production build. */}
+        {onSpawnSimulated && (
+          <button className="btn-sim" onClick={onSpawnSimulated}>
+            <UsersIcon />
+            <span>Add Simulated</span>
+          </button>
+        )}
 
-        <button className="btn-sim danger" onClick={onClearSimulated}>
-          <TrashIcon />
-          <span>Clear</span>
-        </button>
+        {onClearSimulated && (
+          <button className="btn-sim danger" onClick={onClearSimulated}>
+            <TrashIcon />
+            <span>Clear</span>
+          </button>
+        )}
 
         <StatusBadge id="gpsBadge" icon={CrosshairIcon} text={gps.text} variant={gps.variant} />
         <StatusBadge id="status" icon={WifiIcon} text={connected ? 'Online' : 'Offline'} variant={connected ? 'active' : ''} />

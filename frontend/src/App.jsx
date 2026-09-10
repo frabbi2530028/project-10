@@ -8,7 +8,7 @@ import { useGeolocation } from './hooks/useGeolocation';
 import { useLocationSocket } from './hooks/useLocationSocket';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAuth } from './hooks/useAuth';
-import { API_BASE } from './config';
+import { API_BASE, SIMULATION_ENABLED } from './config';
 
 export default function App() {
   useViewportHeight(); // keeps the layout pinned to the real viewport on iOS
@@ -74,6 +74,9 @@ export default function App() {
     signOut();
   };
 
+  // Simulated users are a local testing aid. They are not offered in a
+  // production build: the endpoints are disabled there, and a live campus map
+  // full of invented dots is worse than no map at all.
   const spawnSimulated = async () => {
     if (!position) return;
     try {
@@ -113,8 +116,8 @@ export default function App() {
         connected={connected}
         onToggleConnection={toggleConnection}
         onOpenPhone={openPhone}
-        onSpawnSimulated={spawnSimulated}
-        onClearSimulated={clearSimulated}
+        onSpawnSimulated={SIMULATION_ENABLED ? spawnSimulated : null}
+        onClearSimulated={SIMULATION_ENABLED ? clearSimulated : null}
         onSignOut={handleSignOut}
         student={session.student}
         gps={gps}

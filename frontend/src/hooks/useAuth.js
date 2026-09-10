@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../config';
 
 const STORAGE_KEY = 'studentmap.session';
@@ -14,6 +14,12 @@ const STORAGE_KEY = 'studentmap.session';
 export function useAuth() {
   const [session, setSession] = useState(null);
   const [restoring, setRestoring] = useState(true);
+
+  // signOut reads the token from here rather than closing over `session`, so
+  // its identity stays stable. Consumers put it in dependency arrays, and a
+  // callback that changed on every sign-in would churn their effects.
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
 
   useEffect(() => {
     try {
@@ -35,7 +41,7 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(() => {
-    const token = session?.token;
+    const token = sessionRef.current?.token;
     setSession(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -50,7 +56,7 @@ export function useAuth() {
         body: JSON.stringify({ token }),
       }).catch(() => {});
     }
-  }, [session]);
+  }, []);
 
   return { session, restoring, signIn, signOut };
 }
