@@ -1,7 +1,21 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { FALLBACK_CENTER, TYPE_COLORS } from '../config';
+import { FALLBACK_CENTER, ROLE_RING, SELF_COLOR, TYPE_COLORS } from '../config';
+
+// A divIcon rather than a circleMarker, so the pulse can be plain CSS.
+// anchor = half of the 18px icon, to centre it on the actual coordinate.
+const selfIcon = L.divIcon({
+  className: 'live-dot-icon',
+  html:
+    '<span class="live-dot">' +
+    '<span class="live-dot-ring"></span>' +
+    '<span class="live-dot-ring delayed"></span>' +
+    '<span class="live-dot-core"></span>' +
+    '</span>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
 
 /**
  * Leaflet is driven imperatively through refs rather than via a React
@@ -25,11 +39,17 @@ export default function MapView({ position, people, myId }) {
     const start = position || FALLBACK_CENTER;
     const map = L.map(containerRef.current, { zoomControl: true }).setView([start.lat, start.lng], 17);
 
-    // Standard OpenStreetMap tiles — full colour and richly detailed
-    // (buildings, POIs, labelled roads), free, and no API key.
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
+    // A light basemap, so the map is part of the white interface rather than
+    // a bright rectangle sitting in the middle of it. Carto's Positron keeps
+    // roads and labels legible while staying pale enough that the coloured
+    // markers are the only saturated thing on screen. {r} serves @2x tiles to
+    // retina displays.
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution:
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+        '© <a href="https://carto.com/attributions">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 20,
     }).addTo(map);
 
     // NOTE: intentionally no click/tap-to-set-location handler. Your own
@@ -39,6 +59,15 @@ export default function MapView({ position, people, myId }) {
     return () => {
       map.remove();
       mapRef.current = null;
+      // map.remove() destroys the layers but not our references to them.
+      // Leaving them set means the next mount takes the "already exists"
+      // branch and calls setLatLng on a marker belonging to a destroyed map,
+      // which never gets added to the new one — so after a sign-out and back
+      // in, your own dot and everyone else's would simply never reappear.
+      myMarkerRef.current = null;
+      myAccCircleRef.current = null;
+      markersRef.current = {};
+      hasFitOthersOnce.current = false;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -78,12 +107,19 @@ export default function MapView({ position, people, myId }) {
     if (myMarkerRef.current) {
       myMarkerRef.current.setLatLng([lat, lng]);
     } else {
-      const marker = L.circleMarker([lat, lng], {
-        radius: 10,
-        fillColor: '#fbbf24',
-        color: '#fff7e6',
-        weight: 3,
-        fillOpacity: 1,
+      // addTo() before bindTooltip() is load-bearing: a permanent tooltip is
+      // opened at bind time only if the layer is already on the map. Swap
+      // these two lines and the "You" label silently never appears, because
+      // the mouseover path that would otherwise open it is disabled by
+      // interactive: false.
+      //
+      // No zIndexOffset needed — an L.marker lives in markerPane (600) and
+      // everyone else's circleMarkers are in overlayPane (400), so your own
+      // dot is already above them.
+      const marker = L.marker([lat, lng], {
+        icon: selfIcon,
+        keyboard: false,
+        interactive: false,
       }).addTo(map);
       marker.bindTooltip('You', {
         permanent: true,
@@ -102,10 +138,12 @@ export default function MapView({ position, people, myId }) {
       } else {
         myAccCircleRef.current = L.circle([lat, lng], {
           radius: accuracy,
-          color: '#f59e0b',
-          fillColor: '#f59e0b',
-          fillOpacity: 0.1,
+          color: SELF_COLOR,
+          fillColor: SELF_COLOR,
+          fillOpacity: 0.07,
           weight: 1,
+          opacity: 0.35,
+          interactive: false,
         }).addTo(map);
       }
     }
@@ -128,13 +166,17 @@ export default function MapView({ position, people, myId }) {
         return;
       }
 
+      // White stroke, not dark: on a pale basemap a light ring reads as a
+      // raised bead, while a dark one reads as a hole punched in the map.
       const marker = L.circleMarker([loc.lat, loc.lng], {
         radius: 8,
-        fillColor: TYPE_COLORS[loc.type] || '#ffffff',
-        color: '#0b0f19',
-        weight: 2,
-        opacity: 0.95,
-        fillOpacity: 0.92,
+        fillColor: TYPE_COLORS[loc.type] || '#9aa2b4',
+        color: '#ffffff',
+        weight: 2.5,
+        opacity: 1,
+        fillOpacity: 0.95,
+        // Solid / dashed / dotted ring per role — see ROLE_RING.
+        dashArray: ROLE_RING[loc.type] || null,
       });
       // Anonymous role tooltip — no name, no student ID.
       marker.bindTooltip(loc.type.charAt(0).toUpperCase() + loc.type.slice(1), {

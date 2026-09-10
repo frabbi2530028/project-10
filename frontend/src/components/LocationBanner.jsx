@@ -4,7 +4,9 @@ export default function LocationBanner({ hint, onEnableLocation }) {
   if (!hint.visible) return null;
 
   return (
-    <div id="loc-banner" style={{ display: 'block' }}>
+    // Advisory rather than an error, so `polite`: it should be announced when
+    // the reader next pauses, not cut across whatever it is already saying.
+    <div id="loc-banner" role="status" aria-live="polite">
       <AlertIcon />
       <span id="loc-banner-text">{hint.text}</span>
       {hint.showButton && (

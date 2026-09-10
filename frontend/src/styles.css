@@ -1,86 +1,99 @@
 /* ── Reset ─────────────────────────────────────────── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* ── Design tokens ────────────────────────────────── */
+/* ── Design tokens ────────────────────────────────────
+   A paper-and-ink interface. The page is a warm survey paper, cards are a
+   brighter white lifted off it, and wells are a deeper tone pressed into it.
+   Separation comes from temperature and shadow, never from going dark.
+
+   Every colour pair below was measured rather than eyeballed: text tokens
+   clear WCAG AA (4.5:1) on both the page and a card, control edges clear the
+   3:1 that WCAG 1.4.11 requires of input boundaries, and the map's role
+   colours clear 3:1 against the paper. */
 :root {
-    --bg:            #060911;
-    --bg-glow-1:     #101a30;
-    --bg-glow-2:     #160c22;
+    /* Papers. Steps are ~4.7 and ~5.6 ΔE apart — comfortably above the
+       just-noticeable difference for large flat fields, which a 1-2 ΔE step
+       is not. */
+    --paper:        #f4f3ee;
+    --paper-raised: #fffffe;
+    --paper-sunk:   #e8e5db;
 
-    --surface:          rgba(255, 255, 255, 0.06);
-    --surface-hover:    rgba(255, 255, 255, 0.11);
-    /* Opacity is deliberately not lower: over the light OSM basemap
-       a very transparent dark panel turns muddy gray and the text
-       stops being readable. The glass read comes from the heavy
-       blur + saturation below, which is how macOS does it too. */
-    --surface-strong:   rgba(14, 18, 30, 0.72);   /* big glass panels — topbar, sheet, modal */
-    --surface-elevated: rgba(16, 20, 33, 0.85);   /* small chips needing more legibility over the map */
+    /* Ink, taken from UIU's own dark slate (#1f2d38 in their stylesheet).
+       Slate, never black. */
+    --ink:       #1f2d38;  /* 12.7:1 on paper */
+    --ink-soft:  #455a6b;  /*  6.5:1 */
+    --ink-muted: #4f6473;  /*  4.9:1 on the sunk paper — the lightest ink
+                              allowed, and it clears AA on all three surfaces */
 
-    --border:        rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.2);
+    --edge: #75858f;   /* control borders — 3.0:1 at worst, meets 1.4.11 on
+                          every surface a control can sit on */
+    --rule: #d9d6cb;   /* decorative separators only, never a control edge */
 
-    --glass-blur:      blur(26px) saturate(190%);
-    --glass-blur-sm:   blur(14px) saturate(170%);
-    --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    /* UIU's brand colours, read from their own theme stylesheet
+       (uiu.ac.bd/wp-content/themes/uiu-main/css/) and confirmed against the
+       dominant chromatic pixels of their header logo:
+         #F68B1F  the orange used for fills and the 4-5px accent underlines
+         #2F4858  the deep slate behind their content sections
+         #1F2D38  the darker slate they use for borders — our --ink
 
-    --text:        #f3f5fa;
-    --text-muted:  #aab6cc;
-    --text-faint:  #8492ad;
+       The orange is a light colour: white on it is 2.4:1 and fails badly, so
+       it is always paired with dark ink, which is how UIU uses it too. The
+       deepened variant exists for the few places that need a white label. */
+    --uiu-orange:      #f68b1f;  /* --ink on it: 5.8:1 */
+    --uiu-orange-deep: #a3590d;  /* white on it: 5.3:1 */
+    --uiu-slate:       #2f4858;  /* white on it: 9.6:1 */
 
-    --accent:        #f59e0b;
-    --accent-strong: #d97706;
-    --accent2:       #fb923c;
-    --accent2-strong:#ea580c;
+    /* Status stays semantic rather than brand — "connected" reading green is
+       worth more to a user than another orange. */
+    --ok-ink:      #1c6b58;  --ok-wash:     #e4efe9;  --ok-solid:  #16624f;
+    --warn-ink:    #8a5220;  --warn-wash:   #f8ece0;
+    --danger-ink:  #9c3446;  --danger-wash: #f7e6e8;
 
-    --student: #fb7185;
-    --faculty: #60a5fa;
-    --staff:   #34d399;
-    --you:     #fbbf24;
+    /* Your own marker. Deliberately outside the brand palette: the three role
+       colours carry UIU's, so "you" needs to be the one dot that can never be
+       mistaken for somebody else's (ΔE > 44 from all three). The role colours
+       themselves live in config.js, where Leaflet can read them. */
+    --self: #6b4c9a;
 
-    --success: #34d399;
-    --warning: #fb923c;
-    --danger:  #f87171;
+    /* Type scale — six steps, and only six. */
+    --text-2xs: 0.6875rem;  /* 11px */
+    --text-xs:  0.8125rem;  /* 13px */
+    --text-sm:  0.9375rem;  /* 15px */
+    --text-md:  1.125rem;   /* 18px */
+    --text-lg:  1.5rem;     /* 24px */
+    --text-xl:  2rem;       /* 32px */
 
-    --radius-sm:   8px;
-    --radius-md:   12px;
-    --radius-lg:   18px;
-    --radius-full: 999px;
+    /* Space scale — multiples of 4, and only these. */
+    --s1: 4px;  --s2: 8px;   --s3: 12px; --s4: 16px;
+    --s5: 20px; --s6: 24px;  --s8: 32px; --s10: 40px;
 
-    --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
-    --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-full: 999px;
+
+    /* Two-part shadows: a tight contact shadow plus a wide ambient one. One
+       blurred shadow reads as a sticker; two read as an object with height. */
+    --lift-1: 0 1px 2px rgba(35, 39, 46, 0.06);
+    --lift-2: 0 1px 2px rgba(35, 39, 46, 0.06), 0 6px 16px -6px rgba(35, 39, 46, 0.12);
+    --lift-3: 0 1px 3px rgba(35, 39, 46, 0.07), 0 14px 34px -12px rgba(35, 39, 46, 0.17);
+    --lift-4: 0 2px 4px rgba(35, 39, 46, 0.06), 0 28px 60px -22px rgba(35, 39, 46, 0.22);
+
+    --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-swift: cubic-bezier(0.4, 0, 0.2, 1);
 
     --font: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+    /* Written by usePointerGlow. The defaults keep every rule that reads them
+       valid before the pointer has moved, and on touch where it never will. */
+    --px: 50%; --py: 50%; --tilt-x: 0deg; --tilt-y: 0deg;
 }
 
-/* Height of the *visible* viewport.
-   On iOS Safari `100vh` means the tallest possible viewport (toolbars
-   hidden), so a 100vh layout overflows the actual visible area and the page
-   scrolls — which is what pushed the top bar off-screen. `100dvh` fixes that
-   on iOS 16+; older iPhones don't support it, so JS keeps --app-height in
-   sync with the real height and wins over both fallbacks. */
+/* On iOS Safari `100vh` is the tallest possible viewport (toolbars hidden),
+   so a 100vh layout overflows what you can see and the page scrolls the top
+   bar away. `100dvh` fixes that on iOS 16+; older iPhones don't support it,
+   so JS keeps --app-height in sync and wins over both fallbacks. */
 :root { --app-height: 100vh; }
-@supports (height: 100dvh) {
-    :root { --app-height: 100dvh; }
-}
+@supports (height: 100dvh) { :root { --app-height: 100dvh; } }
 
 html { height: 100%; }
-
-/* position:fixed pins the page to the viewport so iOS can't scroll or
-   rubber-band the chrome out of view — the app is a fixed surface, not a
-   scrolling document. */
-
-
-/* React mounts here, so #root carries the column layout the body used to
-   own in the static version. It deliberately creates no stacking context
-   or transform, so the mobile sheet's position:fixed still resolves
-   against the viewport. */
-#root {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-}
 
 body {
     position: fixed;
@@ -90,21 +103,57 @@ body {
     height: var(--app-height);
     overscroll-behavior: none;
     font-family: var(--font);
-    color: var(--text);
-    background:
-        radial-gradient(1100px 560px at 14% -8%, var(--bg-glow-1) 0%, transparent 60%),
-        radial-gradient(900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
-        var(--bg);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--ink);
+    background: var(--paper);
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
 }
 
-.icon {
-    width: 15px;
-    height: 15px;
-    flex-shrink: 0;
-    stroke: currentColor;
+/* React mounts here. It deliberately creates no stacking context or
+   transform, so the mobile sheet's position:fixed still resolves against the
+   viewport. */
+#root { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+
+/* A wrapper that exists only so the share dialog has something to mark inert.
+   `contents` removes its own box, so the top bar and map remain direct flex
+   children of #root and the layout is unchanged. */
+.app-shell { display: contents; }
+
+.icon { width: 15px; height: 15px; flex-shrink: 0; stroke: currentColor; }
+
+/* ── Animated backdrop ────────────────────────────────
+   The contour canvas sits behind everything. The grain above it dithers the
+   drawing: perfectly clean linework is the giveaway that something was
+   computed, and a little noise is what makes it read as printed.
+
+   Deliberately NOT mix-blend-mode. A full-viewport blend layer over a canvas
+   that repaints every frame forces a full-screen recomposite every frame; a
+   plain low-opacity layer is visually identical here and the compositor can
+   cache it, because it never changes. */
+.contour-field {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.grain {
+    position: fixed;
+    inset: 0;
+    /* Above every panel: grain that stops at the edge of each surface does
+       the opposite of its job, which is to make the whole screen read as one
+       piece of paper. */
+    z-index: 9000;
+    pointer-events: none;
+    opacity: 0.055;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* ── Top bar ─────────────────────────────────────── */
@@ -112,104 +161,102 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    padding: 12px 22px;
-    padding-top: calc(12px + env(safe-area-inset-top));
-    padding-left: calc(22px + env(safe-area-inset-left));
-    padding-right: calc(22px + env(safe-area-inset-right));
-    border-bottom: 1px solid var(--border);
+    gap: var(--s3);
+    padding: var(--s3) var(--s5);
+    padding-top: calc(var(--s3) + env(safe-area-inset-top));
+    padding-left: calc(var(--s5) + env(safe-area-inset-left));
+    padding-right: calc(var(--s5) + env(safe-area-inset-right));
     position: relative;
-    /* Above #sheet-scrim (2400) so the mobile sheet — which lives
-       inside this element's stacking context — paints above the
-       scrim rather than under it. */
+    /* Above #sheet-scrim (2400) so the mobile sheet — which lives inside this
+       element's stacking context — paints above the scrim, not under it. */
     z-index: 2600;
     flex-wrap: wrap;
     flex: 0 0 auto;
 }
-/* The glass lives on a pseudo-element, NOT on #topbar itself.
-   An element with backdrop-filter becomes the containing block for
-   its position:fixed descendants — with the filter on #topbar, the
-   mobile controls sheet anchored itself to the bar instead of the
-   viewport and hung open across the map. */
+
+/* Opaque, not frosted. #topbar and #map are siblings in a column flex
+   container and never overlap, so there is nothing behind the bar but the
+   page — blurring a flat colour costs a full-width compositor pass and
+   returns that same flat colour. */
 #topbar::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: -1;
-    background: var(--surface-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    box-shadow: var(--glass-highlight);
+    background: var(--paper-raised);
+    box-shadow: 0 1px 0 var(--rule), var(--lift-1);
 }
+
+/* A wash of light following the cursor along the bar. Subtle by design: the
+   bar should feel alive, not spotlit. */
 #topbar::after {
     content: '';
     position: absolute;
-    left: 0; right: 0; bottom: -1px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.55), transparent);
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+        460px circle at var(--px) var(--py),
+        rgba(246, 139, 31, 0.16),
+        transparent 72%
+    );
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: var(--s3); }
+
 .brand-mark {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-md);
+    background: var(--uiu-orange);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
     flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
 }
-.brand-mark .icon { width: 18px; height: 18px; color: #2b1a02; stroke-width: 2.4; }
+/* A specular streak, as on a curved glossy surface. */
+.brand-mark::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.4), transparent 46%);
+}
+.brand-mark .icon { width: 18px; height: 18px; color: var(--ink); stroke-width: 2.3; position: relative; }
+
 .brand-text h1 {
-    font-size: 1.05rem;
+    font-size: var(--text-md);
     font-weight: 800;
-    letter-spacing: -0.01em;
-    background: linear-gradient(135deg, #ffffff, #9aa7c2);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1.15;
 }
 .brand-text p {
-    font-size: 0.66rem;
+    font-size: var(--text-2xs);
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--text-faint);
+    color: var(--ink-muted);
 }
 
-#topbar .controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-}
+#topbar .controls { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
 
-/* ── Mobile-only: slim status dot + menu button ──────
-   Hidden on desktop, where the full badges and buttons
-   are already laid out inline in the top bar. */
-.topbar-mobile-actions { display: none; align-items: center; gap: 12px; }
+/* ── Mobile-only: status dot + menu button ────────── */
+.topbar-mobile-actions { display: none; align-items: center; gap: var(--s3); }
 
 .status-dot {
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    background: var(--text-faint);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+    background: var(--ink-muted);
+    box-shadow: 0 0 0 3px rgba(35, 39, 46, 0.06);
     flex-shrink: 0;
-    transition: background .2s ease, box-shadow .2s ease;
+    transition: background .25s var(--ease-swift), box-shadow .25s var(--ease-swift);
 }
-.status-dot.active {
-    background: var(--success);
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
-    animation: pulse-dot 1.8s ease-in-out infinite;
-}
-.status-dot.warning {
-    background: var(--warning);
-    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.2);
-}
+.status-dot.active { background: var(--ok-ink); box-shadow: 0 0 0 3px rgba(28, 107, 88, 0.16); animation: pulse-dot 2s var(--ease-swift) infinite; }
+.status-dot.warning { background: var(--warn-ink); box-shadow: 0 0 0 3px rgba(138, 82, 32, 0.16); }
 
 .btn-menu {
     display: none;
@@ -218,10 +265,10 @@ body {
     width: 38px;
     height: 38px;
     padding: 0 !important;
-    border-radius: var(--radius-full);
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text) !important;
+    border-radius: var(--r-full);
+    background: var(--paper) !important;
+    border: 1px solid var(--edge) !important;
+    color: var(--ink-soft) !important;
 }
 .btn-menu .icon { width: 17px; height: 17px; }
 
@@ -231,407 +278,664 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(4, 6, 12, 0.45);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background: rgba(35, 39, 46, 0.2);
     z-index: 2400;
     opacity: 0;
-    transition: opacity .25s ease;
+    transition: opacity .3s var(--ease-out);
 }
 #sheet-scrim.open { display: block; opacity: 1; }
 
 /* ── Buttons ─────────────────────────────────────── */
+/* Note the specificity: this selector is (1,0,1) because of the ID, so it
+   beats any plain `.btn-*` class rule. Anything a variant needs to change —
+   the border colour in particular — has to be set here or matched at equal
+   weight, or the variant silently loses and the control renders edgeless. */
 #topbar button {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px 15px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-full);
+    gap: var(--s2);
+    padding: var(--s2) var(--s4);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-full);
     font-family: var(--font);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    font-size: var(--text-xs);
+    font-weight: 600;
     cursor: pointer;
-    backdrop-filter: var(--glass-blur-sm);
-    -webkit-backdrop-filter: var(--glass-blur-sm);
-    transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease, filter .15s ease;
+    /* transform is eased faster than colour: the press should snap back
+       before the fill settles, which is what makes a control feel responsive
+       rather than soft. */
+    transition:
+        transform .16s var(--ease-out),
+        box-shadow .22s var(--ease-out),
+        background .22s var(--ease-swift),
+        border-color .22s var(--ease-swift),
+        color .22s var(--ease-swift);
     white-space: nowrap;
 }
-#topbar button:active { transform: scale(0.96); }
+#topbar button:active { transform: translateY(1px) scale(0.98); }
 
-.btn-connect {
-    background: var(--surface);
-    border-color: var(--border);
-    color: var(--text);
+/* One focus treatment for every control in the app. */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--uiu-orange-deep);
+    outline-offset: 2px;
 }
-.btn-connect:hover { background: var(--surface-hover); border-color: var(--border-strong); }
-.btn-connect.connected {
-    background: linear-gradient(135deg, var(--success), #10b981);
+
+.btn-connect { background: var(--paper); color: var(--ink-soft); box-shadow: var(--lift-1); }
+.btn-connect:hover { background: var(--paper-raised); transform: translateY(-1px); box-shadow: var(--lift-2); }
+#topbar .btn-connect.connected {
+    background: linear-gradient(145deg, var(--ok-ink), var(--ok-solid));
     border-color: transparent;
-    color: #052e22;
-    box-shadow: 0 4px 16px rgba(52, 211, 153, 0.32);
+    color: #fff;
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.btn-connect .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: currentColor; opacity: .55;
-}
-.btn-connect.connected .dot {
-    animation: pulse-dot 1.6s ease-in-out infinite;
-}
+.btn-connect.connected:hover { filter: brightness(1.08); }
+.btn-connect .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+.btn-connect.connected .dot { opacity: .95; animation: pulse-dot 1.8s var(--ease-swift) infinite; }
 
-.btn-phone {
-    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-    color: #2b1a02;
-    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
+#topbar .btn-phone {
+    background: linear-gradient(145deg, #3c5a6d, var(--uiu-slate));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.btn-phone:hover { filter: brightness(1.08); box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45); }
+.btn-phone:hover { filter: brightness(1.07); transform: translateY(-1px); box-shadow: var(--lift-3); }
 
-.btn-sim {
-    background: var(--surface);
-    border-color: var(--border);
-    color: var(--text-muted);
-}
-.btn-sim:hover { background: var(--surface-hover); color: var(--text); border-color: var(--border-strong); }
-.btn-sim.danger:hover { color: var(--danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.1); }
+.btn-sim { background: var(--paper-sunk); color: var(--ink-soft); }
+.btn-sim:hover { background: var(--paper-raised); color: var(--ink); box-shadow: var(--lift-1); }
+#topbar .btn-sim.danger:hover { color: var(--danger-ink); border-color: var(--danger-ink); background: var(--danger-wash); }
 
 /* ── Status badges ───────────────────────────────── */
 .status-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.72rem;
+    gap: var(--s2);
+    font-size: var(--text-2xs);
     font-weight: 700;
-    letter-spacing: 0.01em;
-    padding: 7px 12px;
-    border-radius: var(--radius-full);
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur-sm);
-    -webkit-backdrop-filter: var(--glass-blur-sm);
-    border: 1px solid var(--border);
-    box-shadow: var(--glass-highlight);
-    color: var(--text-muted);
+    padding: var(--s2) var(--s3);
+    border-radius: var(--r-full);
+    background: var(--paper-sunk);
+    border: 1px solid var(--edge);
+    color: var(--ink-soft);
+    transition: background .25s var(--ease-swift), color .25s var(--ease-swift), border-color .25s var(--ease-swift);
 }
 .status-badge .icon { width: 13px; height: 13px; }
-.status-badge.active {
-    background: rgba(52, 211, 153, 0.12);
-    border-color: rgba(52, 211, 153, 0.35);
-    color: var(--success);
-}
-.status-badge.warning {
-    background: rgba(251, 146, 60, 0.12);
-    border-color: rgba(251, 146, 60, 0.35);
-    color: var(--warning);
-}
+.status-badge.active  { background: var(--ok-wash);   border-color: rgba(28, 107, 88, 0.3);  color: var(--ok-ink); }
+.status-badge.warning { background: var(--warn-wash); border-color: rgba(138, 82, 32, 0.3);  color: var(--warn-ink); }
+
 @keyframes pulse-dot {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50%      { opacity: 0.4; transform: scale(0.7); }
+    50%      { opacity: 0.45; transform: scale(0.72); }
 }
 
-/* ── Map ─────────────────────────────────────────── */
+/* ── Map ──────────────────────────────────────────────
+   The map is inset like a survey sheet laid on a drafting table, so the live
+   contour drawing behind it stays visible at the edges — the backdrop belongs
+   to this screen too, not just to sign-in. */
+.map-frame {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    padding: var(--s6);
+}
+
+/* A soft lift of light tracking the cursor across the sheet, as a loupe held
+   over paper would give. `soft-light` keeps it a change in luminosity rather
+   than a white film over the map, so labels underneath stay readable. */
+.map-lens {
+    position: absolute;
+    inset: var(--s6);
+    border-radius: var(--r-xl);
+    pointer-events: none;
+    z-index: 2;
+    mix-blend-mode: soft-light;
+    background: radial-gradient(
+        280px circle at var(--px) var(--py),
+        rgba(255, 255, 255, 0.55),
+        rgba(255, 255, 255, 0.14) 45%,
+        transparent 72%
+    );
+}
+
+/* Corner marks, the way a survey sheet or a print proof is trimmed. Four
+   L-shaped pairs drawn as background gradients — no extra elements, and the
+   one motif on this screen that is specific to maps rather than to dashboards
+   in general. */
+.map-frame::before {
+    content: '';
+    position: absolute;
+    inset: var(--s3);
+    pointer-events: none;
+    z-index: 2;
+    background-image:
+        linear-gradient(var(--edge), var(--edge)), linear-gradient(var(--edge), var(--edge)),
+        linear-gradient(var(--edge), var(--edge)), linear-gradient(var(--edge), var(--edge)),
+        linear-gradient(var(--edge), var(--edge)), linear-gradient(var(--edge), var(--edge)),
+        linear-gradient(var(--edge), var(--edge)), linear-gradient(var(--edge), var(--edge));
+    background-repeat: no-repeat;
+    background-size:
+        14px 1px, 1px 14px,
+        14px 1px, 1px 14px,
+        14px 1px, 1px 14px,
+        14px 1px, 1px 14px;
+    background-position:
+        left top, left top,
+        right top, right top,
+        left bottom, left bottom,
+        right bottom, right bottom;
+    opacity: 0.55;
+}
+
 #map {
     flex: 1 1 auto;
     width: 100%;
-    background: var(--bg);
-}
-.leaflet-control-zoom {
-    border: none !important;
-    border-radius: var(--radius-md) !important;
+    border-radius: var(--r-xl);
     overflow: hidden;
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    box-shadow: var(--shadow-md), var(--glass-highlight) !important;
+    background: var(--paper-sunk);
+    box-shadow: var(--lift-3), 0 0 0 1px var(--rule);
 }
+
+.leaflet-container { background: var(--paper-sunk); font-family: var(--font); }
+
+.leaflet-control-zoom { border: 1px solid var(--edge) !important; border-radius: var(--r-md) !important; overflow: hidden; box-shadow: var(--lift-2) !important; }
 .leaflet-control-zoom a {
-    background: var(--surface-elevated) !important;
-    color: var(--text) !important;
-    border-color: var(--border) !important;
+    background: var(--paper-raised) !important;
+    color: var(--ink-soft) !important;
+    border-color: var(--rule) !important;
+    transition: background .2s var(--ease-swift), color .2s var(--ease-swift);
 }
-.leaflet-control-zoom a:hover { background: rgba(30, 38, 58, 0.9) !important; }
+.leaflet-control-zoom a:hover { background: var(--paper) !important; color: var(--uiu-orange-deep) !important; }
+
 .leaflet-control-attribution {
-    background: rgba(6, 9, 17, 0.65) !important;
-    color: var(--text-faint) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: var(--ink-muted) !important;
+    /* Both spellings: unprefixed backdrop-filter only landed in Safari 18, and
+       this app is aimed at phones. */
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    font-size: var(--text-2xs) !important;
 }
-.leaflet-control-attribution a { color: var(--text-muted) !important; }
+.leaflet-control-attribution a { color: var(--ink-soft) !important; }
+
 .leaflet-tooltip {
-    background: var(--surface-elevated) !important;
-    backdrop-filter: var(--glass-blur-sm);
-    -webkit-backdrop-filter: var(--glass-blur-sm);
-    border: 1px solid var(--border) !important;
-    color: var(--text) !important;
-    border-radius: 8px !important;
+    background: var(--paper-raised) !important;
+    border: 1px solid var(--rule) !important;
+    color: var(--ink) !important;
+    border-radius: var(--r-sm) !important;
     font-family: var(--font) !important;
-    font-size: 0.7rem !important;
+    font-size: var(--text-2xs) !important;
     font-weight: 700 !important;
-    box-shadow: var(--shadow-sm) !important;
+    box-shadow: var(--lift-2) !important;
 }
-.leaflet-tooltip-top:before { border-top-color: var(--surface-elevated) !important; }
+/* Both the fill and the border, or the tooltip's hairline stops dead where
+   the arrow begins. */
+.leaflet-tooltip-top::before { border-top-color: var(--rule) !important; }
+
+/* ── "You are here" marker ────────────────────────────
+   A Leaflet divIcon, so the pulse is CSS on real DOM nodes. A circleMarker
+   would mean re-setting its radius from JS every frame, which fights
+   Leaflet's own rendering and repaints on each change. */
+.live-dot { position: relative; display: block; width: 18px; height: 18px; }
+.live-dot-core {
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--self);
+    border: 2.5px solid #fff;
+    box-shadow: var(--lift-2);
+}
+/* Two rings on one set of keyframes, offset by half the cycle, so the pulse
+   is continuous rather than arriving in bursts. */
+.live-dot-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(107, 76, 154, 0.3);
+    animation: live-pulse 2.8s var(--ease-out) infinite;
+}
+.live-dot-ring.delayed { animation-delay: 1.4s; }
+@keyframes live-pulse {
+    0%   { transform: scale(0.6); opacity: 0.7; }
+    80%  { transform: scale(2.9); opacity: 0; }
+    100% { transform: scale(2.9); opacity: 0; }
+}
 
 /* ── Location hint banner ────────────────────────── */
 #loc-banner {
-    display: none;
     position: fixed;
-    /* Offset by the notch inset too, so it clears the top bar on every
-       iPhone rather than sliding underneath it. env() is 0 elsewhere. */
-    top: calc(80px + env(safe-area-inset-top));
+    top: calc(84px + env(safe-area-inset-top));
     left: 50%;
+    /* In the base rule, NOT only in the keyframes. Centring that depends on an
+       animation's forwards fill breaks the moment anyone touches the
+       animation. */
     transform: translateX(-50%);
-    width: min(92vw, 460px);
-    background: var(--surface-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    color: var(--text);
-    padding: 16px 20px;
-    border-radius: var(--radius-lg);
-    font-size: 0.83rem;
-    line-height: 1.5;
+    width: min(92vw, 470px);
+    background: var(--paper-raised);
+    color: var(--ink-soft);
+    padding: var(--s4) var(--s5);
+    border-radius: var(--r-lg);
+    font-size: var(--text-xs);
+    line-height: 1.6;
     z-index: 1500;
     text-align: center;
-    border: 1px solid rgba(251, 146, 60, 0.4);
-    box-shadow: var(--shadow-lg), var(--glass-highlight);
-    animation: banner-in .25s ease-out;
+    border: 1px solid var(--warn-ink);
+    box-shadow: var(--lift-3);
+    animation: banner-in .42s var(--ease-out) backwards;
 }
 @keyframes banner-in {
-    from { opacity: 0; transform: translate(-50%, -6px); }
-    to   { opacity: 1; transform: translate(-50%, 0); }
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-#loc-banner .icon {
-    width: 16px; height: 16px;
-    color: var(--warning);
-    vertical-align: -3px;
-    margin-right: 4px;
-}
+#loc-banner .icon { width: 16px; height: 16px; color: var(--warn-ink); vertical-align: -3px; margin-right: var(--s1); }
+
 .btn-enable-gps {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    margin: 12px auto 0;
-    padding: 10px 22px;
+    gap: var(--s2);
+    margin: var(--s4) auto 0;
+    padding: var(--s3) var(--s6);
     border: none;
-    border-radius: var(--radius-full);
-    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-    color: #2b1a02;
+    border-radius: var(--r-full);
+    background: linear-gradient(145deg, #ffa23f, var(--uiu-orange));
+    color: var(--ink);
     font-family: var(--font);
-    font-weight: 800;
-    font-size: 0.82rem;
+    font-weight: 700;
+    font-size: var(--text-xs);
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
-    transition: filter .15s ease;
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: transform .16s var(--ease-out), filter .2s var(--ease-swift), box-shadow .22s var(--ease-out);
 }
-.btn-enable-gps:hover { filter: brightness(1.08); }
+.btn-enable-gps:hover { filter: brightness(1.07); transform: translateY(-1px); box-shadow: var(--lift-3); }
+.btn-enable-gps:active { transform: translateY(1px) scale(0.98); }
 .btn-enable-gps .icon { width: 15px; height: 15px; }
 
-/* ── Modal (Phone Connect) ───────────────────────── */
+/* ── Share modal ─────────────────────────────────── */
 #phone-modal-overlay {
-    display: none;
     position: fixed;
     inset: 0;
-    background: rgba(4, 6, 12, 0.78);
+    display: flex;
+    background: rgba(35, 39, 46, 0.28);
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     z-index: 3000;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: var(--s5);
+    animation: overlay-in .3s var(--ease-out) backwards;
 }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
 .modal-card {
-    background: var(--surface-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 28px;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-xl);
+    padding: var(--s8);
     width: 100%;
     max-width: 420px;
+    max-height: 100%;
+    overflow-y: auto;
     text-align: center;
-    box-shadow: var(--shadow-lg), var(--glass-highlight);
-    animation: modal-appear 0.22s cubic-bezier(.2,.8,.3,1.1);
+    box-shadow: var(--lift-4);
+    animation: modal-appear .42s var(--ease-out) backwards;
 }
 @keyframes modal-appear {
-    from { transform: scale(0.94) translateY(6px); opacity: 0; }
-    to   { transform: scale(1) translateY(0); opacity: 1; }
+    from { opacity: 0; translate: 0 14px; scale: 0.94; }
+    to   { opacity: 1; translate: 0 0;    scale: 1; }
 }
+
 .modal-icon {
-    width: 46px; height: 46px;
-    border-radius: 14px;
-    margin: 0 auto 14px;
+    width: 48px; height: 48px;
+    border-radius: var(--r-lg);
+    margin: 0 auto var(--s4);
     display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, var(--accent), var(--accent2-strong));
-    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.3);
+    background: var(--uiu-orange);
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
-.modal-icon .icon { width: 24px; height: 24px; color: #2b1a02; stroke-width: 2.2; }
-.modal-card h2 {
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: var(--text);
-    margin-bottom: 8px;
-    letter-spacing: -0.01em;
-}
-.modal-card p {
-    font-size: 0.84rem;
-    color: var(--text-muted);
-    margin-bottom: 18px;
-    line-height: 1.55;
-}
+.modal-icon .icon { width: 24px; height: 24px; color: var(--ink); stroke-width: 2.2; }
+
+.modal-card h2 { font-size: var(--text-lg); font-weight: 700; color: var(--ink); margin-bottom: var(--s2); letter-spacing: -0.02em; }
+.modal-card p { font-size: var(--text-xs); color: var(--ink-muted); margin-bottom: var(--s5); line-height: 1.65; }
+
 .qr-container {
     background: #fff;
-    padding: 14px;
-    border-radius: var(--radius-md);
+    padding: var(--s3);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 16px;
+    margin: 0 auto var(--s4);
     min-height: 200px;
     min-width: 200px;
     width: fit-content;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--lift-1);
 }
-.qr-container img {
-    width: 190px;
-    height: 190px;
-    display: block;
-}
-.qr-container .qr-loading {
-    color: #94a3b8;
-    font-size: 0.82rem;
-    font-weight: 600;
-}
+.qr-container img { width: 190px; height: 190px; display: block; }
+.qr-container .qr-loading,
+.qr-container .qr-failed { color: var(--ink-muted); font-size: var(--text-xs); font-weight: 600; max-width: 180px; line-height: 1.5; }
+
 .url-box {
-    background: rgba(255, 255, 255, 0.04);
-    padding: 11px 14px;
-    border-radius: var(--radius-sm);
+    background: var(--paper-sunk);
+    padding: var(--s3);
+    border-radius: var(--r-sm);
     word-break: break-all;
     font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
-    font-size: 0.78rem;
-    color: var(--accent);
-    margin-bottom: 18px;
-    border: 1px dashed var(--border-strong);
+    font-size: var(--text-2xs);
+    color: var(--ink);
+    margin-bottom: var(--s5);
+    border: 1px solid var(--rule);
 }
-.modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-}
+
+.modal-actions { display: flex; gap: var(--s3); justify-content: center; }
 .modal-actions button {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 10px 18px;
-    border-radius: var(--radius-full);
-    border: none;
+    gap: var(--s2);
+    padding: var(--s3) var(--s5);
+    border-radius: var(--r-full);
+    border: 1px solid transparent;
     font-family: var(--font);
-    font-weight: 700;
-    font-size: 0.82rem;
+    font-weight: 600;
+    font-size: var(--text-xs);
     cursor: pointer;
-    transition: filter .15s ease, background .15s ease;
+    transition: transform .16s var(--ease-out), filter .2s var(--ease-swift), background .2s var(--ease-swift);
 }
+.modal-actions button:active { transform: translateY(1px) scale(0.98); }
 .modal-actions .icon { width: 15px; height: 15px; }
-.btn-copy { background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #2b1a02; }
-.btn-copy:hover { filter: brightness(1.08); }
-.btn-close-modal { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border) !important; }
-.btn-close-modal:hover { background: var(--surface-hover); color: var(--text); }
 
-/* ── Glass panels (legend + info) ────────────────── */
-.panel {
+.btn-copy { background: linear-gradient(145deg, var(--uiu-orange-deep), var(--uiu-orange-deep)); color: #fff; box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.22); }
+.btn-copy:hover { filter: brightness(1.07); }
+.btn-close-modal { background: var(--paper-sunk); color: var(--ink-soft); border-color: var(--edge) !important; }
+.btn-close-modal:hover { background: var(--paper); color: var(--ink); }
+
+/* ── Legend ───────────────────────────────────────────
+   Rendered, not parked: three colours of dot with no key anywhere is not a
+   map. Each role also carries a distinct ring — solid, dashed, dotted, the
+   same on the marker as in this key — so meaning never rests on hue alone.
+   The colours are separated in CIELAB too, but that is no help to a
+   colour-blind user, and a second channel is. */
+.legend {
     position: fixed;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    background: var(--surface-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 14px 18px;
+    left: calc(var(--s5) + env(safe-area-inset-left));
+    bottom: calc(var(--s5) + env(safe-area-inset-bottom));
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-lg);
+    padding: var(--s3) var(--s4);
     z-index: 1000;
-    font-size: 0.8rem;
-    box-shadow: var(--shadow-md), var(--glass-highlight);
-    animation: banner-in .3s ease-out;
+    font-size: var(--text-2xs);
+    box-shadow: var(--lift-2);
 }
-.panel-title {
-    font-size: 0.65rem;
-    font-weight: 800;
+.legend-title {
+    font-size: var(--text-2xs);
+    font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--text-faint);
-    margin-bottom: 10px;
+    color: var(--ink-muted);
+    margin-bottom: var(--s2);
+}
+.legend-row { display: flex; align-items: center; gap: var(--s2); padding: 2px 0; color: var(--ink-soft); font-weight: 600; }
+.legend-row.you { margin-top: var(--s1); padding-top: var(--s2); border-top: 1px solid var(--rule); color: var(--ink); }
+.legend-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    /* Style is set per role from JS; the width and colour are shared. */
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--edge);
 }
 
-.legend { left: calc(20px + env(safe-area-inset-left)); }
-.legend-row {
+/* ── "You" tooltip ───────────────────────────────── */
+.you-tooltip {
+    background: var(--self) !important;
+    border: none !important;
+    color: #fff !important;
+    font-family: var(--font) !important;
+    font-weight: 700 !important;
+    font-size: var(--text-2xs) !important;
+    padding: 3px var(--s2) !important;
+    border-radius: var(--r-full) !important;
+    box-shadow: var(--lift-2) !important;
+}
+.you-tooltip::before { border-top-color: var(--self) !important; }
+
+/* ── Login screen ─────────────────────────────────── */
+.login-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    /* `safe` keeps a card taller than the viewport from having its top clipped
+       and made unreachable, which plain `center` does in WebKit. */
+    align-items: safe center;
+    justify-content: center;
+    padding: var(--s6);
+    padding-top: calc(var(--s6) + env(safe-area-inset-top));
+    padding-bottom: calc(var(--s6) + env(safe-area-inset-bottom));
+    z-index: 4000;
+    overflow-y: auto;
+    /* Gives the card's rotation somewhere to happen. Without a perspective on
+       an ancestor, rotateX/Y flattens into a meaningless skew. */
+    perspective: 1200px;
+}
+
+/* The entrance lives on the shell and the tilt on the card. They are separate
+   elements because an entrance animation with a forwards fill permanently
+   retains whatever properties it animates, and animations outrank normal
+   declarations — so an entrance that animates `transform` silently pins it,
+   and the tilt written into --tilt-x/--tilt-y is never applied. */
+.login-card-shell {
+    width: 100%;
+    max-width: 396px;
+    animation: card-in .7s var(--ease-out) backwards;
+}
+@keyframes card-in {
+    from { opacity: 0; translate: 0 22px; scale: 0.97; }
+    to   { opacity: 1; translate: 0 0;    scale: 1; }
+}
+
+.login-card {
+    position: relative;
+    width: 100%;
+    /* Opaque, not frosted. backdrop-filter over the animating canvas behind it
+       would re-blur the whole card every frame, and it also forces the element
+       into a flat grouping context — which would defeat the 3D tilt. */
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: var(--r-xl);
+    padding: var(--s8) var(--s6);
+    text-align: center;
+    box-shadow: var(--lift-4);
+    transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+    transition: box-shadow .3s var(--ease-out);
+}
+
+/* The sheen that tracks the cursor. It multiplies a warm tone into the card
+   *away* from the pointer, leaving the lit region the only neutral white —
+   adding white to a white card is a change of about two levels out of 255 and
+   is invisible on every display. Light here is the absence of tint. */
+.login-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+        420px circle at var(--px) var(--py),
+        rgba(255, 255, 255, 0) 0%,
+        rgba(238, 232, 216, 0.28) 55%,
+        rgba(232, 226, 208, 0.4) 100%
+    );
+}
+
+/* A crisper edge on the side nearest the cursor, so the card catches light the
+   way a bevelled pane does. */
+.login-card::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 1px;
+    background: radial-gradient(
+        300px circle at var(--px) var(--py),
+        rgba(255, 255, 255, 0.95),
+        rgba(255, 255, 255, 0.35) 42%,
+        transparent 72%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+}
+
+.login-card > * { position: relative; z-index: 1; }
+
+.login-mark { width: 56px; height: 56px; border-radius: var(--r-lg); margin: 0 auto var(--s5); }
+.login-mark .icon { width: 27px; height: 27px; }
+
+.login-card h1 { font-size: var(--text-xl); font-weight: 800; letter-spacing: -0.03em; color: var(--ink); }
+.login-sub { font-size: var(--text-xs); color: var(--ink-soft); margin: var(--s2) 0 var(--s6); }
+
+.field { display: block; text-align: left; margin-bottom: var(--s4); }
+.field-label {
+    display: block;
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: var(--s2);
+}
+.field input {
+    width: 100%;
+    padding: var(--s3) var(--s4);
+    border-radius: var(--r-md);
+    /* A real, visible edge. WCAG 1.4.11 asks 3:1 of anything that identifies a
+       control, and an input you cannot find the boundary of is the specific
+       thing that makes light interfaces read as unfinished. */
+    border: 1px solid var(--edge);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    /* 16px minimum stops iOS Safari zooming when the field takes focus. */
+    font-size: 16px;
+    font-weight: 500;
+    outline: none;
+    transition: border-color .22s var(--ease-swift), background .22s var(--ease-swift), box-shadow .22s var(--ease-swift);
+}
+.field input::placeholder { color: var(--ink-muted); font-weight: 500; }
+.field input:focus { border-color: var(--uiu-orange-deep); background: var(--paper-raised); box-shadow: 0 0 0 3px rgba(246, 139, 31, 0.28); }
+.field input[aria-invalid='true'] { border-color: var(--danger-ink); }
+
+.login-error {
+    background: var(--danger-wash);
+    border: 1px solid var(--danger-ink);
+    color: var(--danger-ink);
+    border-radius: var(--r-md);
+    padding: var(--s3);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    text-align: left;
+    margin-bottom: var(--s4);
+    animation: shake .4s var(--ease-swift) backwards;
+}
+/* Short and small — enough to say "look here", not enough to be cute. */
+@keyframes shake {
+    0%, 100% { translate: 0; }
+    25%      { translate: -5px; }
+    50%      { translate: 4px; }
+    75%      { translate: -2px; }
+}
+
+.login-submit {
+    width: 100%;
+    padding: var(--s4);
+    border: none;
+    border-radius: var(--r-full);
+    background: linear-gradient(145deg, #ffa23f, var(--uiu-orange));
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--lift-2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: transform .16s var(--ease-out), filter .2s var(--ease-swift), box-shadow .22s var(--ease-out);
+}
+.login-submit:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: var(--lift-3); }
+.login-submit:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+.login-submit:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* A determinate-looking sweep while the request is in flight, so the button
+   shows progress rather than only going dim. */
+.login-submit.busy {
+    position: relative;
+    overflow: hidden;
+}
+.login-submit.busy::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.3) 50%, transparent 80%);
+    animation: sweep 1.1s linear infinite;
+}
+@keyframes sweep {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(100%); }
+}
+
+.login-note { font-size: var(--text-2xs); color: var(--ink-soft); line-height: 1.6; margin-top: var(--s5); }
+
+/* Signed-in identity + sign out, inside the controls */
+.account-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 3px 0;
-    color: var(--text-muted);
+    justify-content: space-between;
+    gap: var(--s3);
+    font-size: var(--text-2xs);
+    color: var(--ink-muted);
     font-weight: 600;
 }
-.legend-row.you {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-    color: var(--text);
-}
-.legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+.account-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-signout {
+    background: var(--paper-sunk) !important;
+    border: 1px solid var(--edge) !important;
+    color: var(--ink-soft) !important;
     flex-shrink: 0;
 }
+.btn-signout:hover { color: var(--danger-ink) !important; border-color: var(--danger-ink) !important; }
 
-.info-panel { right: calc(20px + env(safe-area-inset-right)); min-width: 188px; }
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 16px;
-    padding: 3px 0;
-}
-.info-label { color: var(--text-faint); font-weight: 600; }
-.info-value {
-    color: var(--text);
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-}
-
-/* ── Custom Leaflet tooltip for "You" marker ─────── */
-.you-tooltip {
-    background: linear-gradient(135deg, var(--you), #f59e0b) !important;
-    border: none !important;
-    color: #3a2405 !important;
-    font-family: var(--font) !important;
-    font-weight: 800 !important;
-    font-size: 0.72rem !important;
-    padding: 4px 10px !important;
-    border-radius: var(--radius-full) !important;
-    box-shadow: 0 3px 10px rgba(251, 191, 36, 0.4) !important;
-}
-.you-tooltip::before {
-    border-top-color: #f59e0b !important;
-}
-
-/* ── Responsive adjustments for mobile ─────────────
-   The top bar used to wrap every control onto 2-3 lines,
-   eating a huge slice of the screen. On phones it now stays
-   a single slim row (brand + live status dot + menu button),
-   and all the actual controls slide up from the bottom in a
-   frosted sheet — the way a native app would do it. */
+/* ── Mobile ───────────────────────────────────────── */
 @media (max-width: 650px) {
     #topbar {
-        padding: 9px 14px;
-        padding-top: calc(9px + env(safe-area-inset-top));
-        gap: 10px;
+        padding: var(--s2) var(--s3);
+        padding-top: calc(var(--s2) + env(safe-area-inset-top));
+        gap: var(--s3);
         flex-wrap: nowrap;
     }
     .brand-text p { display: none; }
-    .brand-text h1 { font-size: 0.95rem; }
-    .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+    .brand-mark { width: 31px; height: 31px; }
     .brand-mark .icon { width: 16px; height: 16px; }
 
     .topbar-mobile-actions { display: flex; }
     .btn-menu { display: inline-flex; }
 
-    /* The control cluster becomes a bottom sheet */
+    /* Full-bleed: there is no room to inset the sheet on a phone. */
+    .map-frame { padding: var(--s3); }
+    #map { border-radius: var(--r-lg); }
+    /* These two track the frame's padding and the map's radius. Left at their
+       desktop values they land inside the map instead of around it, and the
+       straight corner marks clip across the rounded corner. */
+    .map-lens { inset: var(--s3); border-radius: var(--r-lg); }
+    .map-frame::before { inset: 3px; }
+
+    /* The control cluster becomes a bottom sheet. This one genuinely overlays
+       the map, so the frost here is doing real work. */
     #topbar .controls {
         position: fixed;
         left: 0;
@@ -640,191 +944,61 @@ body {
         flex-direction: column;
         align-items: stretch;
         flex-wrap: nowrap;
-        gap: 10px;
-        padding: 12px 18px calc(20px + env(safe-area-inset-bottom));
-        background: var(--surface-strong);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        border-top: 1px solid var(--border-strong);
-        border-radius: 24px 24px 0 0;
-        box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5), var(--glass-highlight);
+        gap: var(--s3);
+        padding: var(--s3) var(--s5) calc(var(--s5) + env(safe-area-inset-bottom));
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(20px) saturate(160%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        border-top: 1px solid var(--rule);
+        border-radius: var(--r-xl) var(--r-xl) 0 0;
+        box-shadow: 0 -12px 40px -14px rgba(35, 39, 46, 0.22);
         transform: translateY(105%);
-        transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+        /* visibility is what actually takes the closed sheet out of the tab
+           order — a transform alone leaves six controls focusable off-screen,
+           with the focus ring invisible. Delayed on close so the slide-out is
+           still seen. */
+        visibility: hidden;
+        transition: transform .42s var(--ease-out), visibility 0s .42s;
         z-index: 2500;
     }
-    #topbar .controls.open { transform: translateY(0); }
-
-    .sheet-handle {
-        display: block;
-        width: 38px;
-        height: 4px;
-        border-radius: var(--radius-full);
-        background: var(--border-strong);
-        margin: 0 auto 6px;
+    #topbar .controls.open {
+        transform: translateY(0);
+        visibility: visible;
+        transition: transform .42s var(--ease-out), visibility 0s;
     }
 
-    /* Full-width stacked rows inside the sheet */
+    .sheet-handle { display: block; width: 38px; height: 4px; border-radius: var(--r-full); background: var(--edge); margin: 0 auto var(--s1); }
+
     #topbar .controls button,
-    #topbar .controls .status-badge {
-        width: 100%;
-        justify-content: center;
-    }
-    #topbar .controls button { padding: 12px 16px; font-size: 0.85rem; }
-    #topbar .controls .status-badge { padding: 10px 14px; font-size: 0.78rem; }
+    #topbar .controls .status-badge { width: 100%; justify-content: center; }
+    #topbar .controls button { padding: var(--s3) var(--s4); font-size: var(--text-sm); }
+    #topbar .controls .status-badge { padding: var(--s3); font-size: var(--text-xs); }
 
     /* Testing-only controls, hidden on real phones. Needs the full
-       #topbar .controls prefix: a bare `.btn-sim` loses on
-       specificity to `#topbar button { display: inline-flex }`,
-       so these were still showing up in the sheet. */
+       `#topbar .controls` prefix: a bare `.btn-sim` loses on specificity to
+       `#topbar button { display: inline-flex }`. */
     #topbar .controls .btn-sim { display: none; }
-    .panel { bottom: 12px; padding: 10px 14px; font-size: 0.73rem; }
-    .legend { left: 10px; }
-    .info-panel { right: 10px; min-width: 148px; }
-    #loc-banner { top: calc(58px + env(safe-area-inset-top)); padding: 14px 16px; font-size: 0.8rem; }
+
+    .legend { left: var(--s2); bottom: var(--s2); padding: var(--s2) var(--s3); }
+    #loc-banner { top: calc(58px + env(safe-area-inset-top)); padding: var(--s3) var(--s4); }
+    .login-card { padding: var(--s6) var(--s5); }
+    .modal-card { padding: var(--s6); }
 }
 
-/* ── Login screen ─────────────────────────────────── */
-.login-screen {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    padding-top: calc(24px + env(safe-area-inset-top));
-    padding-bottom: calc(24px + env(safe-area-inset-bottom));
-    background:
-        radial-gradient(1100px 560px at 14% -8%, var(--bg-glow-1) 0%, transparent 60%),
-        radial-gradient(900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
-        var(--bg);
-    z-index: 4000;
-    overflow-y: auto;
+/* ── Reduced motion ───────────────────────────────────
+   All of the motion here is decorative — entrances, the drifting contours,
+   the tilt, the pulses. None of it carries meaning, so all of it goes.
+   ContourField and usePointerGlow additionally check this in JS, because a
+   canvas loop and a rAF easing loop cannot be stopped from a stylesheet. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .login-card { transform: none !important; }
+    .login-submit.busy::after { display: none; }
 }
-
-.login-card {
-    width: 100%;
-    max-width: 380px;
-    background: var(--surface-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 30px 26px;
-    text-align: center;
-    box-shadow: var(--shadow-lg), var(--glass-highlight);
-    animation: modal-appear .25s cubic-bezier(.2, .8, .3, 1.1);
-}
-
-.login-mark {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
-    margin: 0 auto 16px;
-}
-.login-mark .icon { width: 26px; height: 26px; }
-
-.login-card h1 {
-    font-size: 1.4rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #ffffff, #9aa7c2);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-}
-
-.login-sub {
-    font-size: 0.84rem;
-    color: var(--text-muted);
-    margin: 6px 0 22px;
-}
-
-.field { display: block; text-align: left; margin-bottom: 14px; }
-.field-label {
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-    margin-bottom: 6px;
-}
-.field input {
-    width: 100%;
-    padding: 12px 14px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text);
-    font-family: var(--font);
-    /* 16px minimum stops iOS Safari zooming in when the field is focused */
-    font-size: 16px;
-    font-weight: 600;
-    outline: none;
-    transition: border-color .15s ease, background .15s ease;
-}
-.field input::placeholder { color: var(--text-faint); font-weight: 500; }
-.field input:focus {
-    border-color: var(--accent);
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.login-error {
-    background: rgba(248, 113, 113, 0.12);
-    border: 1px solid rgba(248, 113, 113, 0.4);
-    color: #fecaca;
-    border-radius: var(--radius-md);
-    padding: 10px 12px;
-    font-size: 0.8rem;
-    line-height: 1.45;
-    text-align: left;
-    margin-bottom: 14px;
-}
-
-.login-submit {
-    width: 100%;
-    padding: 13px 18px;
-    border: none;
-    border-radius: var(--radius-full);
-    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-    color: #2b1a02;
-    font-family: var(--font);
-    font-size: 0.9rem;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
-    transition: filter .15s ease, transform .12s ease;
-}
-.login-submit:hover:not(:disabled) { filter: brightness(1.08); }
-.login-submit:active:not(:disabled) { transform: scale(0.97); }
-.login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.login-note {
-    font-size: 0.72rem;
-    color: var(--text-faint);
-    line-height: 1.5;
-    margin-top: 16px;
-}
-
-/* Signed-in identity + sign out, shown inside the controls */
-.account-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    font-weight: 600;
-}
-.account-email {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.btn-signout {
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text-muted) !important;
-    flex-shrink: 0;
-}
-.btn-signout:hover { color: var(--danger) !important; border-color: rgba(248, 113, 113, 0.4) !important; }

@@ -4,14 +4,30 @@ import MapView from './components/MapView';
 import LocationBanner from './components/LocationBanner';
 import PhoneModal from './components/PhoneModal';
 import LoginScreen from './components/LoginScreen';
+import ContourField from './components/ContourField';
+import { Legend } from './components/Panels';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useLocationSocket } from './hooks/useLocationSocket';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAuth } from './hooks/useAuth';
+import { usePointerGlow } from './hooks/usePointerGlow';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import { API_BASE, SIMULATION_ENABLED } from './config';
 
 export default function App() {
   useViewportHeight(); // keeps the layout pinned to the real viewport on iOS
+
+  // The bar has no tilt — it is fixed furniture, not a card you can pick up.
+  const topBarRef = usePointerGlow({ maxTilt: 0 });
+
+  // On a phone the map is very nearly full-bleed, so the contour drawing would
+  // be running a full-screen trace every frame to fill a few millimetres of
+  // gutter. Not worth the battery on the weakest device we target; the sign-in
+  // screen still gets it in full.
+  const narrow = useMediaQuery('(max-width: 650px)');
+
+  // Lights the map sheet under the cursor. No tilt — the sheet lies flat.
+  const mapFrameRef = usePointerGlow({ maxTilt: 0 });
 
   const { session, restoring, signIn, signOut } = useAuth();
 
@@ -103,8 +119,17 @@ export default function App() {
     }
   };
 
-  // Avoid flashing the login screen while the stored session is being read.
-  if (restoring) return null;
+  // Reading the stored session takes one tick. Returning null would blank the
+  // page for that tick and then pop the card in; showing the backdrop instead
+  // means the first paint is already the finished composition.
+  if (restoring) {
+    return (
+      <div className="login-screen">
+        <ContourField />
+        <div className="grain" aria-hidden="true" />
+      </div>
+    );
+  }
 
   if (!session) {
     return <LoginScreen onAuthenticated={signIn} />;
@@ -112,7 +137,19 @@ export default function App() {
 
   return (
     <>
+      {/* The backdrop belongs to this screen too. The map is inset like a
+          survey sheet on a drafting table, so the live contour drawing stays
+          visible around it rather than being covered over after sign-in. */}
+      {!narrow && <ContourField />}
+
+      {/* Everything behind the dialog is made inert while it is open. The
+          overlay stops the mouse and the focus trap stops Tab, but neither
+          removes this content from the accessibility tree — a screen reader's
+          browse mode would still reach "Sign out" behind a modal dialog.
+          `display: contents` keeps the flex layout of #root unchanged. */}
+      <div className="app-shell" inert={phoneOpen}>
       <TopBar
+        barRef={topBarRef}
         connected={connected}
         onToggleConnection={toggleConnection}
         onOpenPhone={openPhone}
@@ -130,13 +167,21 @@ export default function App() {
 
       <LocationBanner hint={hint} onEnableLocation={requestPermission} />
 
+      <div className="map-frame" ref={mapFrameRef}>
+        <MapView position={position} people={people} myId={myId} />
+        {/* A surveyor's loupe: a soft lift of light that follows the cursor
+            across the sheet. Decorative and inert to pointer events. */}
+        <div className="map-lens" aria-hidden="true" />
+      </div>
+
+      <Legend />
+      </div>
+
       <PhoneModal open={phoneOpen} onClose={() => setPhoneOpen(false)} />
 
-      <MapView position={position} people={people} myId={myId} />
-
-      {/* The Legend and Live Info panels are intentionally not rendered —
-          they cluttered the map. The components still exist in
-          components/Panels.jsx; render them here again to bring them back. */}
+      {/* Above everything, so the grain unifies the whole surface instead of
+          stopping at the edge of each panel. */}
+      <div className="grain" aria-hidden="true" />
     </>
   );
 }

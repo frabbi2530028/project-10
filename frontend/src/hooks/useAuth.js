@@ -18,8 +18,13 @@ export function useAuth() {
   // signOut reads the token from here rather than closing over `session`, so
   // its identity stays stable. Consumers put it in dependency arrays, and a
   // callback that changed on every sign-in would churn their effects.
+  //
+  // Written in an effect, not during render: under concurrent rendering a
+  // render that is abandoned would still have mutated the ref.
   const sessionRef = useRef(null);
-  sessionRef.current = session;
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   useEffect(() => {
     try {

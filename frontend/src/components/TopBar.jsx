@@ -1,15 +1,20 @@
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { CrosshairIcon, MenuIcon, PhoneIcon, ShieldIcon, TrashIcon, UsersIcon, WifiIcon } from './Icons';
+
+// Matches the breakpoint in styles.css where the controls become a sheet.
+const SHEET_QUERY = '(max-width: 650px)';
 
 function StatusBadge({ id, icon: Icon, text, variant }) {
   return (
     <span id={id} className={`status-badge ${variant || ''}`.trim()}>
       <Icon />
-      <span className="badge-text">{text}</span>
+      <span>{text}</span>
     </span>
   );
 }
 
 export default function TopBar({
+  barRef,
   connected,
   onToggleConnection,
   onOpenPhone,
@@ -22,12 +27,24 @@ export default function TopBar({
   onToggleMenu,
   hasFix,
 }) {
+  // Below this width the controls are a sheet that closes; above it they are
+  // always-visible bar furniture and must never be made inert.
+  const isSheet = useMediaQuery(SHEET_QUERY);
+
   // The single dot summarises on mobile what the two full badges show on
-  // desktop: green = connected, amber = no GPS fix yet.
+  // desktop: green = connected, amber = no GPS fix yet. The badges that spell
+  // it out live inside the sheet, which is closed by default on exactly the
+  // viewport where the dot is shown — so the dot needs to carry the meaning
+  // in text as well as in colour.
   const dotVariant = connected ? 'active' : hasFix ? '' : 'warning';
+  const statusLabel = connected
+    ? 'Connected'
+    : hasFix
+      ? 'Not connected'
+      : 'Waiting for a GPS fix';
 
   return (
-    <div id="topbar">
+    <div id="topbar" ref={barRef}>
       <div className="brand">
         <div className="brand-mark">
           <ShieldIcon />
@@ -40,18 +57,42 @@ export default function TopBar({
 
       {/* Mobile-only: compact live status dot + menu toggle */}
       <div className="topbar-mobile-actions">
-        <span id="statusDot" className={`status-dot ${dotVariant}`.trim()} title="Connection status" />
-        <button className="btn-menu" onClick={onToggleMenu} aria-label="Open controls">
+        <span
+          id="statusDot"
+          className={`status-dot ${dotVariant}`.trim()}
+          role="img"
+          aria-label={statusLabel}
+          title={statusLabel}
+        />
+        <button
+          className="btn-menu"
+          onClick={onToggleMenu}
+          aria-expanded={menuOpen}
+          aria-controls="topbar-controls"
+          aria-label={menuOpen ? 'Close controls' : 'Open controls'}
+        >
           <MenuIcon />
         </button>
       </div>
 
-      <div className={`controls ${menuOpen ? 'open' : ''}`.trim()}>
+      {/* `inert` keeps the closed sheet out of the tab order and away from
+          assistive tech. CSS visibility handles it too, but inert is the part
+          that is guaranteed — a sheet moved off-screen by a transform alone
+          stays focusable, stranding keyboard users on controls they cannot
+          see. Only applies below 650px, where the sheet actually closes.
+
+          Must be a real boolean: React 19 treats `inert` as a boolean
+          attribute, so an empty string is falsy and REMOVES it. */}
+      <div
+        id="topbar-controls"
+        className={`controls ${menuOpen ? 'open' : ''}`.trim()}
+        inert={!menuOpen && isSheet}
+      >
         <div className="sheet-handle" />
 
         <button className={`btn-connect ${connected ? 'connected' : ''}`.trim()} onClick={onToggleConnection}>
           <span className="dot" />
-          <span className="btn-label">{connected ? 'Connected' : 'Connect'}</span>
+          <span>{connected ? 'Connected' : 'Connect'}</span>
         </button>
 
         <button className="btn-phone" onClick={onOpenPhone}>

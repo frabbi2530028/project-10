@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { API_BASE } from '../config';
+import { usePointerGlow } from '../hooks/usePointerGlow';
+import ContourField from './ContourField';
 import { ShieldIcon } from './Icons';
 
 /**
@@ -11,6 +13,9 @@ import { ShieldIcon } from './Icons';
  * required to open the location WebSocket.
  */
 export default function LoginScreen({ onAuthenticated }) {
+  // Lights and tilts the card as the pointer crosses it.
+  const cardRef = usePointerGlow({ maxTilt: 5 });
+
   const [email, setEmail] = useState('');
   const [studentId, setStudentId] = useState('');
   const [error, setError] = useState(null);
@@ -41,7 +46,16 @@ export default function LoginScreen({ onAuthenticated }) {
 
   return (
     <div className="login-screen">
-      <form className="login-card" onSubmit={submit}>
+      <ContourField />
+      <div className="grain" aria-hidden="true" />
+
+      {/* The entrance animates the shell and the tilt transforms the card.
+          Keeping them on separate elements is what lets both work: an
+          entrance with a forwards fill permanently retains the properties it
+          animates, so an entrance on the card itself would pin `transform`
+          and the tilt would never apply. */}
+      <div className="login-card-shell">
+        <form className="login-card" ref={cardRef} onSubmit={submit}>
         <div className="brand-mark login-mark">
           <ShieldIcon />
         </div>
@@ -61,6 +75,7 @@ export default function LoginScreen({ onAuthenticated }) {
             placeholder="Enter your UIU email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={error ? 'true' : undefined}
             required
           />
         </label>
@@ -74,20 +89,30 @@ export default function LoginScreen({ onAuthenticated }) {
             placeholder="Enter your student ID"
             value={studentId}
             onChange={(e) => setStudentId(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            aria-invalid={error ? 'true' : undefined}
             required
           />
         </label>
 
-        {error && <div className="login-error">{error}</div>}
+        {error && (
+          <div className="login-error" role="alert">
+            {error}
+          </div>
+        )}
 
-        <button type="submit" className="login-submit" disabled={busy}>
+        <button
+          type="submit"
+          className={`login-submit ${busy ? 'busy' : ''}`.trim()}
+          disabled={busy}
+        >
           {busy ? 'Checking…' : 'Sign in'}
         </button>
 
-        <p className="login-note">
-          Your ID and email must agree — the trimester and roll number in each have to match.
-        </p>
-      </form>
+          <p className="login-note">
+            Your ID and email must agree — the trimester and roll number in each have to match.
+          </p>
+        </form>
+      </div>
     </div>
   );
 }
