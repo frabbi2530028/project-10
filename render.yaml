@@ -17,6 +17,10 @@ services:
       # No dev tunnel in production — the host already gives us public HTTPS.
       - key: ENABLE_TUNNEL
         value: "0"
+      # Simulated users are a local testing aid. Leaving the endpoints open in
+      # production would let anyone scatter invented dots across the live map.
+      - key: ENABLE_SIMULATION
+        value: "0"
       # Lock this down to your Netlify URL once you know it, e.g.
       # https://studentmap-uiu.netlify.app
       - key: CORS_ORIGINS

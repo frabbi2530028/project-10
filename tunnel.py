@@ -20,7 +20,6 @@ The tunnel is watched and restarted if it dies, and `get_public_url()`
 returns None while no tunnel is live, so callers never advertise a dead URL.
 """
 
-import os
 import re
 import shutil
 import socket
@@ -29,12 +28,13 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Optional
 
-_tunnel_process: Optional[subprocess.Popen] = None
-_public_url: Optional[str] = None
+from utils import env_flag
+
+_tunnel_process: subprocess.Popen | None = None
+_public_url: str | None = None
 _stop_requested = False
-_watchdog_thread: Optional[threading.Thread] = None
+_watchdog_thread: threading.Thread | None = None
 
 _RECONNECT_DELAY_SECONDS = 3
 
@@ -47,13 +47,13 @@ _HEALTH_FAILURES_BEFORE_RESTART = 3   # ~3 min of real unreachability
 # Restarting the tunnel changes the public hostname, which breaks any already
 # deployed frontend that has the old one compiled in. That is a worse outcome
 # than a temporarily slow tunnel, so unhealthy-restart is opt-in.
-_RESTART_ON_UNHEALTHY = os.environ.get("TUNNEL_RESTART_ON_UNHEALTHY", "0") in ("1", "true", "True")
+_RESTART_ON_UNHEALTHY = env_flag("TUNNEL_RESTART_ON_UNHEALTHY", False)
 
 # cloudflared prints the assigned hostname to stderr during startup.
 _URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
 
-def get_public_url() -> Optional[str]:
+def get_public_url() -> str | None:
     """Returns the current tunnel URL, or None if no live tunnel is up."""
     return _public_url
 
@@ -72,7 +72,7 @@ def _read_stream(process: subprocess.Popen) -> None:
             print(f"🌍 Mobile HTTPS Tunnel Active: {_public_url}")
 
 
-def _spawn_tunnel_process(local_port: int) -> Optional[subprocess.Popen]:
+def _spawn_tunnel_process(local_port: int) -> subprocess.Popen | None:
     cloudflared = shutil.which("cloudflared")
     if not cloudflared:
         print("⚠️  cloudflared not found — no public tunnel.")
@@ -99,7 +99,7 @@ def _spawn_tunnel_process(local_port: int) -> Optional[subprocess.Popen]:
         return None
 
 
-def _tunnel_health(url: str) -> Optional[bool]:
+def _tunnel_health(url: str) -> bool | None:
     """
     Is the advertised tunnel URL actually serving our app?
 
@@ -232,10 +232,16 @@ def start_tunnel(local_port: int = 8000) -> None:
 
 
 def stop_tunnel() -> None:
+    """Shut the tunnel down and stop the watchdog from respawning it."""
     global _tunnel_process, _public_url, _stop_requested, _watchdog_thread
+
     _stop_requested = True
-    if _tunnel_process:
-        _tunnel_process.terminate()
-        _tunnel_process = None
+    process, _tunnel_process = _tunnel_process, None
+    if process is not None:
+        try:
+            process.terminate()
+        except OSError:
+            pass  # already exited — nothing to shut down
+
     _public_url = None
     _watchdog_thread = None

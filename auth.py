@@ -32,9 +32,9 @@ from __future__ import annotations
 import os
 import re
 import secrets
-from datetime import date
+import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from datetime import date
 
 # ---------------------------------------------------------------------------
 # UIU trimester calendar
@@ -57,7 +57,7 @@ SPRING, SUMMER, WINTER = "1", "2", "3"
 VALID_SEASONS = {SPRING, SUMMER, WINTER}
 
 
-def current_trimester(today: Optional[date] = None) -> str:
+def current_trimester(today: date | None = None) -> str:
     """The trimester code in effect on *today*, e.g. '262'."""
     override = os.environ.get("CURRENT_TRIMESTER", "").strip()
     if override:
@@ -112,7 +112,7 @@ class Student:
         }
 
 
-def validate_student(email: str, student_id: str) -> Tuple[Optional[Student], Optional[str]]:
+def validate_student(email: str, student_id: str) -> tuple[Student | None, str | None]:
     """
     Check an (email, student_id) pair.
 
@@ -190,26 +190,63 @@ def validate_student(email: str, student_id: str) -> Tuple[Optional[Student], Op
 # Held in memory, so every restart signs everyone out. That is fine for a
 # single-instance deployment and keeps the door shut on the WebSocket without
 # pulling in a database or a JWT library.
+#
+# Tokens expire. Without a TTL the dict is append-only — every sign-in, every
+# reload after a cleared localStorage, every abandoned tab leaves an entry
+# that is never collected, so a long-running server leaks memory and keeps
+# credentials valid indefinitely.
 
-_sessions: Dict[str, Student] = {}
+SESSION_TTL_SECONDS = 12 * 60 * 60  # a generous campus day
+
+
+@dataclass(frozen=True)
+class _Session:
+    student: Student
+    expires_at: float
+
+
+_sessions: dict[str, _Session] = {}
+
+
+def _now() -> float:
+    """Monotonic clock, so a system time change can't extend or void sessions."""
+    return time.monotonic()
+
+
+def _purge_expired() -> None:
+    now = _now()
+    for token in [t for t, s in _sessions.items() if s.expires_at <= now]:
+        del _sessions[token]
 
 
 def issue_token(student: Student) -> str:
+    """Mint a session token for a validated student."""
+    _purge_expired()
     token = secrets.token_urlsafe(24)
-    _sessions[token] = student
+    _sessions[token] = _Session(student=student, expires_at=_now() + SESSION_TTL_SECONDS)
     return token
 
 
-def resolve_token(token: Optional[str]) -> Optional[Student]:
+def resolve_token(token: str | None) -> Student | None:
+    """The student behind a token, or None if it is unknown or expired."""
     if not token:
         return None
-    return _sessions.get(token)
+    session = _sessions.get(token)
+    if session is None:
+        return None
+    if session.expires_at <= _now():
+        del _sessions[token]
+        return None
+    return session.student
 
 
-def revoke_token(token: Optional[str]) -> None:
+def revoke_token(token: str | None) -> None:
+    """Sign a token out. Unknown tokens are ignored."""
     if token:
         _sessions.pop(token, None)
 
 
 def active_session_count() -> int:
+    """How many sessions are currently valid. Exposed by /api/status."""
+    _purge_expired()
     return len(_sessions)

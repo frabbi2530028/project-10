@@ -1,49 +1,64 @@
 """
 WebSocket connection manager for StudentMap.
 
-Tracks all connected users, their locations, and handles
-broadcasting locations to everyone.
+Owns the set of connected users, their last known position, and the job of
+broadcasting the anonymous location snapshot to everyone.
 """
 
 from __future__ import annotations
 
-import uuid
-import time
-import json
 import asyncio
+import json
+import time
+import uuid
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from fastapi import WebSocket
 
 from utils import VALID_USER_TYPES
 
+# A real client sends its position every few seconds. If we haven't heard from
+# one in this long, the socket is half-open (the phone slept, the Wi-Fi
+# vanished) and no exception will ever tell us — TCP just goes quiet. Dropping
+# them stops a ghost dot sitting on the map forever. Generous on purpose: it
+# is many heartbeats' worth of silence, so a brief stall never evicts anyone.
+STALE_AFTER_SECONDS = 60.0
+
+# Broadcasts are coalesced rather than sent per incoming update. Without this,
+# N clients each sending a heartbeat produce N broadcasts to N recipients —
+# quadratic traffic that becomes the bottleneck well before the map does.
+BROADCAST_INTERVAL_SECONDS = 0.5
+
 
 @dataclass
 class UserState:
-    """Represents a connected user's anonymous state."""
+    """A connected user's anonymous state."""
 
     user_id: str
-    user_type: str          # "student" | "faculty" | "staff"
-    websocket: Optional[WebSocket]  # None for simulated users
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    last_update: float = field(default_factory=time.time)
+    user_type: str                  # "student" | "faculty" | "staff"
+    websocket: WebSocket | None     # None for simulated users
+    latitude: float | None = None
+    longitude: float | None = None
+    last_update: float = field(default_factory=time.monotonic)
     is_simulated: bool = False
+
+    @property
+    def has_position(self) -> bool:
+        return self.latitude is not None and self.longitude is not None
 
 
 class ConnectionManager:
     """
     Manages WebSocket connections and user location state.
 
-    Every connected user (or simulated user) is stored in an internal
-    dict keyed by an anonymous UUID.  No personal identity is ever
-    stored or transmitted — only user_type and coordinates.
+    Every user — real or simulated — is stored in a dict keyed by an anonymous
+    random id. No personal identity is ever stored or transmitted: only the
+    role and the coordinates leave this class.
     """
 
     def __init__(self) -> None:
-        # user_id → UserState
-        self._users: Dict[str, UserState] = {}
+        self._users: dict[str, UserState] = {}
+        self._broadcast_task: asyncio.Task | None = None
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -75,52 +90,21 @@ class ConnectionManager:
     # Location updates
     # ------------------------------------------------------------------
 
-    def update_location(
-        self, user_id: str, lat: float, lng: float
-    ) -> None:
-        """Update the stored location for a user."""
+    def update_location(self, user_id: str, lat: float, lng: float) -> None:
+        """Record a new position for a user. Unknown ids are ignored."""
         user = self._users.get(user_id)
         if user is None:
             return
         user.latitude = lat
         user.longitude = lng
-        user.last_update = time.time()
-
-    def _location_payload(self) -> list[dict]:
-        """
-        Build the anonymous location list sent to every client.
-
-        Each entry: {id, type, lat, lng}
-        No personal information is included.
-        """
-        locations = []
-        for u in self._users.values():
-            if u.latitude is not None and u.longitude is not None:
-                locations.append(
-                    {
-                        "id": u.user_id,
-                        "type": u.user_type,
-                        "lat": u.latitude,
-                        "lng": u.longitude,
-                    }
-                )
-        return locations
-
-    async def broadcast_locations(self) -> None:
-        """Send the current location snapshot to every connected client."""
-        payload = json.dumps(
-            {"event": "locations", "data": self._location_payload()}
-        )
-        await self._broadcast(payload)
+        user.last_update = time.monotonic()
 
     # ------------------------------------------------------------------
-    # Simulated users (for testing)
+    # Simulated users (local testing)
     # ------------------------------------------------------------------
 
-    def add_simulated_user(
-        self, user_type: str, lat: float, lng: float
-    ) -> str:
-        """Add a fake user at given coordinates. Returns the user_id."""
+    def add_simulated_user(self, user_type: str, lat: float, lng: float) -> str:
+        """Add a fake user at the given coordinates. Returns the user_id."""
         if user_type not in VALID_USER_TYPES:
             raise ValueError(f"Invalid user_type: {user_type!r}")
 
@@ -136,40 +120,115 @@ class ConnectionManager:
         return user_id
 
     def remove_simulated_user(self, user_id: str) -> bool:
-        """Remove a simulated user. Returns True if found and removed."""
+        """Remove one simulated user. True if it existed and was removed."""
         user = self._users.get(user_id)
-        if user and user.is_simulated:
+        if user is not None and user.is_simulated:
             del self._users[user_id]
             return True
         return False
 
     def clear_simulated_users(self) -> int:
-        """Remove all simulated users. Returns count removed."""
-        to_remove = [
-            uid for uid, u in self._users.items() if u.is_simulated
-        ]
-        for uid in to_remove:
+        """Remove every simulated user. Returns how many were removed."""
+        stale = [uid for uid, u in self._users.items() if u.is_simulated]
+        for uid in stale:
             del self._users[uid]
-        return len(to_remove)
+        return len(stale)
+
+    # ------------------------------------------------------------------
+    # Broadcasting
+    # ------------------------------------------------------------------
+
+    def schedule_broadcast(self) -> None:
+        """
+        Ask for a broadcast soon, collapsing a burst of calls into one send.
+
+        Every client heartbeat lands here, so sending immediately would mean
+        N² messages per round. Instead the first caller starts a short timer
+        and everyone arriving during it rides along on the same broadcast.
+        """
+        if self._broadcast_task is not None and not self._broadcast_task.done():
+            return
+        self._broadcast_task = asyncio.create_task(self._delayed_broadcast())
+
+    async def _delayed_broadcast(self) -> None:
+        await asyncio.sleep(BROADCAST_INTERVAL_SECONDS)
+        await self.broadcast_locations()
+
+    async def broadcast_locations(self) -> None:
+        """Send the current location snapshot to every connected client."""
+        self._prune_stale()
+        payload = json.dumps({"event": "locations", "data": self._location_payload()})
+        await self._broadcast(payload)
+
+    def _location_payload(self) -> list[dict]:
+        """
+        The anonymous location list every client receives.
+
+        Each entry is {id, type, lat, lng} — no names, no student IDs, nothing
+        that ties a dot back to a person.
+        """
+        return [
+            {
+                "id": u.user_id,
+                "type": u.user_type,
+                "lat": u.latitude,
+                "lng": u.longitude,
+            }
+            for u in self._users.values()
+            if u.has_position
+        ]
+
+    async def _broadcast(self, message: str) -> None:
+        """
+        Send a text message to every real (non-simulated) WebSocket.
+
+        The recipient list is snapshotted first: sending yields to the event
+        loop, and a user connecting or disconnecting mid-send would otherwise
+        mutate the dict we are iterating and raise RuntimeError, killing the
+        broadcast for everyone else. Sends run concurrently because one slow
+        or half-dead client must not hold up the rest.
+        """
+        targets = [u for u in self._users.values() if u.websocket is not None]
+        if not targets:
+            return
+
+        results = await asyncio.gather(
+            *(u.websocket.send_text(message) for u in targets),
+            return_exceptions=True,
+        )
+        for user, result in zip(targets, results):
+            if isinstance(result, Exception):
+                # The socket is gone; drop the user so their dot disappears.
+                self._users.pop(user.user_id, None)
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    async def _broadcast(self, message: str) -> None:
-        """Send a text message to every real (non-simulated) WebSocket."""
-        dead: list[str] = []
-        for uid, user in self._users.items():
-            if user.websocket is not None:
-                try:
-                    await user.websocket.send_text(message)
-                except Exception:
-                    dead.append(uid)
-        # Clean up dead connections
-        for uid in dead:
-            self._users.pop(uid, None)
+    def _prune_stale(self) -> None:
+        """
+        Drop real users who stopped reporting.
+
+        Simulated users are exempt — they are placed once and never move, so
+        silence is their normal state.
+        """
+        cutoff = time.monotonic() - STALE_AFTER_SECONDS
+        stale = [
+            uid
+            for uid, u in self._users.items()
+            if not u.is_simulated and u.last_update < cutoff
+        ]
+        for uid in stale:
+            del self._users[uid]
 
     @property
     def active_count(self) -> int:
+        """How many users are on the map right now, simulated ones included."""
+        self._prune_stale()
         return len(self._users)
 
+    @property
+    def real_count(self) -> int:
+        """How many of those are actual connected people."""
+        self._prune_stale()
+        return sum(1 for u in self._users.values() if not u.is_simulated)
